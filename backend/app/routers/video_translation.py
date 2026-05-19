@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Header
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Any, Dict, List, Optional
@@ -19,8 +19,6 @@ from app.schemas.video_translation import SubtitleParams, VideoTranslationSubmit
 from app.services.oss_service import oss_service
 from app.services.ice_service import ice_service
 from app.services.video_translation_service import video_translation_service
-from app.services.ata_service import ata_service
-from app.services.volcengine_service import volcengine_service
 
 
 class RegisterMediaRequest(BaseModel):
@@ -44,10 +42,31 @@ class UpdateTaskNameRequest(BaseModel):
     original_filename: str
 
 
+class FcCallbackRequest(BaseModel):
+    task_id: int
+    status: str
+    language_results: Optional[Dict[str, Any]] = None
+    result_video_url: Optional[str] = None
+    error_message: Optional[str] = None
+
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
-AUTO_TRANSLATION_MAX_CONCURRENT_TASKS = 3
-auto_translation_semaphore = asyncio.Semaphore(AUTO_TRANSLATION_MAX_CONCURRENT_TASKS)
+fc_submit_semaphore = asyncio.Semaphore(10)
+
+
+def _build_backend_auto_subtitle_params(subtitle_params: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    params = {
+        "alignment": "TopCenter",
+        "font": "Alibaba PuHuiTi",
+        "font_size": 80,
+        "font_color": "#ffffff",
+        "outline": 2,
+        "outline_colour": "#000000",
+        "y": 0.75
+    }
+    params.update({key: value for key, value in (subtitle_params or {}).items() if value is not None})
+    return params
 
 
 def _normalize_target_languages(target_language: Optional[str], target_languages: Optional[List[str]]) -> List[str]:
@@ -112,7 +131,15 @@ def _set_task_language_results(task: VideoTranslationTask, language_results: Dic
 def _language_results_for_response(task: VideoTranslationTask) -> Dict[str, Any]:
     results = _get_task_language_results(task)
     if results:
-        return results
+        # Exclude timeline_json and tts_timestamps to reduce response size
+        clean_results = {}
+        for lang_code, lang_result in results.items():
+            if isinstance(lang_result, dict):
+                clean_result = {k: v for k, v in lang_result.items() if k not in ('timeline_json', 'tts_timestamps')}
+                clean_results[lang_code] = clean_result
+            else:
+                clean_results[lang_code] = lang_result
+        return clean_results
 
     if not task.target_language:
         return {}
@@ -121,7 +148,6 @@ def _language_results_for_response(task: VideoTranslationTask) -> Dict[str, Any]
         "status": task.status.value,
         "docker_task_id": task.docker_task_id,
         "result_video_url": task.result_video_url,
-        "tts_timestamps": _json_loads(task.tts_timestamps, None),
         "error_message": task.error_message,
     }
     return {task.target_language: result}
@@ -136,13 +162,14 @@ def _serialize_video_translation_task(task: VideoTranslationTask) -> Dict[str, A
         "docker_task_id": task.docker_task_id,
         "status": task.status.value,
         "result_video_url": task.result_video_url,
+        "original_video_url": task.original_video_url,
         "language_results": _language_results_for_response(task),
-        "tts_timestamps": _json_loads(task.tts_timestamps, None),
         "error_message": task.error_message,
         "is_auto": task.is_auto,
         "current_stage": task.current_stage,
         "charged_points": task.charged_points or 0,
         "points_refunded": bool(task.points_refunded),
+        "tags": _json_loads(task.tags, []),
         "created_at": task.created_at.isoformat() if task.created_at else None,
         "updated_at": task.updated_at.isoformat() if task.updated_at else None,
         "completed_at": task.completed_at.isoformat() if task.completed_at else None,
@@ -308,421 +335,86 @@ class AutoTranslationSubmitRequest(BaseModel):
     target_languages: Optional[List[str]] = None
     oss_key: str
     file_url: str
+    original_video_url: Optional[str] = None
     skip_subtitle_erasure: bool = False
     subtitle_params: Optional[SubtitleParams] = None
+    tags: Optional[List[str]] = None
+    custom_voice_id: Optional[int] = None
 
 
-async def process_auto_translation_background(
+async def submit_auto_translation_to_fc_background(
     task_id: int,
     oss_key: str,
     file_url: str,
     original_filename: str,
+    target_language: Optional[str],
     target_languages: List[str],
-    skip_subtitle_erasure: bool = False,
-    subtitle_params: Optional[Dict[str, Any]] = None
+    skip_subtitle_erasure: bool,
+    subtitle_params: Optional[Dict[str, Any]],
+    custom_voice_id: Optional[int] = None
 ):
-    """Background task to process auto translation workflow"""
-    logger.info(f"[自动翻译] 任务 {task_id} 已进入后台队列，最多同时处理 {AUTO_TRANSLATION_MAX_CONCURRENT_TASKS} 个任务")
-    async with auto_translation_semaphore:
-        await _process_auto_translation_background(
-            task_id,
-            oss_key,
-            file_url,
-            original_filename,
-            target_languages,
-            skip_subtitle_erasure,
-            subtitle_params
-        )
-
-
-async def _process_auto_translation_background(
-    task_id: int,
-    oss_key: str,
-    file_url: str,
-    original_filename: str,
-    target_languages: List[str],
-    skip_subtitle_erasure: bool = False,
-    subtitle_params: Optional[Dict[str, Any]] = None
-):
-    """Run one auto translation workflow after acquiring queue slot"""
-    db = next(get_db())
-    try:
-        logger.info(f"[自动翻译] 任务 {task_id} 已获得处理槽位，开始执行")
-        logger.info(f"[自动翻译] 开始自动翻译工作流，任务ID: {task_id}")
-        logger.info(f"[自动翻译] 文件: {original_filename}, 目标语言: {', '.join(target_languages)}")
-        
-        # Step 1: Audio Separation and Subtitle Extraction
-        logger.info(f"[自动翻译] 步骤 1/3: 开始声伴分离与字幕提取，任务ID: {task_id}")
-        task = db.query(VideoTranslationTask).filter(VideoTranslationTask.id == task_id).first()
-        if task:
-            task.current_stage = "subtitle_extraction"
-            db.commit()
-            logger.info(f"[自动翻译] 更新任务 {task_id} 的当前阶段为字幕提取")
-
-        logger.info(f"[自动翻译] 为 {original_filename} 创建字幕提取任务")
-        extract_task = SubtitleExtractTask(
-            user_id=task.user_id,
-            source_oss_key=oss_key,
-            original_filename=original_filename,
-            source_type="video",
-            status=ExtractStatus.PROCESSING
-        )
-        db.add(extract_task)
-        db.commit()
-        db.refresh(extract_task)
-        logger.info(f"[自动翻译] 创建字幕提取任务 {extract_task.id}")
-
-        logger.info(f"[自动翻译] 从 {file_url} 下载视频")
-        import requests
-        video_response = requests.get(file_url, timeout=30)
-        video_response.raise_for_status()
-        video_data = video_response.content
-        logger.info(f"[自动翻译] 视频下载完成，大小: {len(video_data)} 字节")
-
-        voice_audio_url = None
-        original_audio_url = None
-        background_audio_url = None
-        logger.info(f"[自动翻译] 步骤 1.1/3: 开始音频分离（声伴分离）")
-        import os
-        import subprocess
-        import tempfile
-        temp_video_path = None
-        temp_audio_path = None
+    logger.info(f"[自动翻译] 任务 {task_id} 已进入 FC 提交队列，最多同时提交 10 个任务")
+    async with fc_submit_semaphore:
+        db = next(get_db())
         try:
-            with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_video:
-                temp_video.write(video_data)
-                temp_video_path = temp_video.name
+            task = db.query(VideoTranslationTask).filter(VideoTranslationTask.id == task_id).first()
+            if not task:
+                logger.warning(f"[自动翻译] FC 提交前找不到任务 {task_id}")
+                return
 
-            logger.info(f"[自动翻译] 视频已保存到临时文件: {temp_video_path}")
+            if task.status != VideoTranslationStatus.PROCESSING:
+                logger.info(f"[自动翻译] 任务 {task_id} 当前状态为 {task.status.value}，跳过 FC 提交")
+                return
 
-            temp_audio_path = temp_video_path.replace(".mp4", ".wav")
-            logger.info(f"[自动翻译] 使用ffmpeg提取原始音频")
-            subprocess.run([
-                "ffmpeg", "-i", temp_video_path,
-                "-vn", "-acodec", "pcm_s16le",
-                "-ar", "16000", "-ac", "1",
-                temp_audio_path, "-y"
-            ], check=True, capture_output=True)
-            logger.info(f"[自动翻译] 原始音频提取完成: {temp_audio_path}")
-
-            audio_oss_key = f"audio_extraction/{task_id}_original.wav"
-            with open(temp_audio_path, 'rb') as audio_file:
-                oss_service.upload_file(audio_oss_key, audio_file, content_type="audio/wav")
-
-            original_audio_url = oss_service.generate_presigned_url(audio_oss_key, expires=3600, method='GET')
-            extract_task.audio_oss_key = audio_oss_key
-            extract_task.audio_oss_url = original_audio_url
+            # Get custom voice voice_id if custom_voice_id is provided
+            custom_voice_voice_id = None
+            if custom_voice_id:
+                from app.models.custom_voice import CustomVoice
+                custom_voice = db.query(CustomVoice).filter(
+                    CustomVoice.id == custom_voice_id,
+                    CustomVoice.user_id == task.user_id,
+                    CustomVoice.is_active == True
+                ).first()
+                if custom_voice:
+                    custom_voice_voice_id = custom_voice.voice_id
+                    task.custom_voice_id = custom_voice_id
+            
+            
+            task.current_stage = "video_translation"
             db.commit()
-            logger.info(f"[自动翻译] 原始音频已上传到OSS，预签名URL: {original_audio_url}")
 
-            from app.services.mediakit_service import mediakit_service
-            logger.info(f"[自动翻译] 提交音频分离任务到MediaKit")
-            demix_job_id = await mediakit_service.submit_separate_voice_task(audio_url=original_audio_url)
-
-            if not demix_job_id:
-                raise Exception("音频分离任务提交失败")
-
-            logger.info(f"[自动翻译] 音频分离任务已提交，任务ID: {demix_job_id}")
-
-            demix_max_attempts = 60
-            logger.info(f"[自动翻译] 等待音频分离完成（最多 {demix_max_attempts} 次尝试）")
-            for attempt in range(demix_max_attempts):
-                await asyncio.sleep(10)
-                demix_status = await mediakit_service.get_task_status(demix_job_id)
-                status = demix_status.get('status') if demix_status else 'None'
-                logger.info(f"[自动翻译] 音频分离状态检查 {attempt + 1}/{demix_max_attempts}: {status}")
-
-                if mediakit_service.is_task_completed(demix_status):
-                    logger.info(f"[自动翻译] 音频分离成功完成")
-                    result = demix_status.get("result", {})
-                    voice_audio_url = result.get("voice_audio_url") or result.get("vocal_audio_url")
-                    background_audio_url = result.get("background_audio_url")
-                    if background_audio_url:
-                        task.background_audio_url = background_audio_url
-                        db.commit()
-                        logger.info(f"[自动翻译] 背景音URL已保存到数据库: {background_audio_url}")
-                    if voice_audio_url:
-                        logger.info(f"[自动翻译] 人声音频URL将用于ATA字幕识别: {voice_audio_url}")
-                    else:
-                        logger.warning(f"[自动翻译] 音频分离完成但未返回人声音频URL，将使用原始音频提交ATA")
-                    break
-                elif mediakit_service.is_task_failed(demix_status):
-                    raise Exception(f"音频分离任务失败: {demix_status}")
-                elif attempt >= demix_max_attempts - 1:
-                    raise Exception("音频分离超时")
-
-        except Exception as e:
-            logger.error(f"[自动翻译] 音频分离失败: {str(e)}")
-            logger.warning(f"[自动翻译] 将使用原始音频提交ATA，并继续使用原视频音频")
+            fc_response = await video_translation_service.submit_auto_translation(
+                task_id=task_id,
+                oss_key=oss_key,
+                file_url=file_url,
+                original_filename=original_filename,
+                target_language=target_language,
+                target_languages=target_languages,
+                custom_voice_id=custom_voice_voice_id,
+                skip_subtitle_erasure=skip_subtitle_erasure,
+                subtitle_params=subtitle_params
+            )
+            logger.info(f"[自动翻译] 任务 {task_id} 已提交到 FC 服务，响应: {fc_response}")
+            
+            # Update language_results from FC response
+            if fc_response and 'language_results' in fc_response:
+                task.language_results_json = json.dumps(fc_response['language_results'], ensure_ascii=False, default=_json_default)
+                db.commit()
+        except Exception as submit_error:
+            logger.error(f"[自动翻译] 任务 {task_id} 提交到 FC 服务失败: {str(submit_error)}", exc_info=True)
+            try:
+                task = db.query(VideoTranslationTask).filter(VideoTranslationTask.id == task_id).first()
+                if task:
+                    task.status = VideoTranslationStatus.FAILED
+                    task.error_message = f"提交到视频翻译服务失败: {str(submit_error)}"
+                    task.current_stage = None
+                    _refund_translation_points(db, task)
+                    db.commit()
+            except Exception as db_error:
+                logger.error(f"[自动翻译] 更新任务 {task_id} 提交失败状态失败: {str(db_error)}", exc_info=True)
+                db.rollback()
         finally:
-            logger.info(f"[自动翻译] 清理临时文件")
-            for temp_path in (temp_video_path, temp_audio_path):
-                if temp_path and os.path.exists(temp_path):
-                    os.unlink(temp_path)
-
-        # Submit to ATA after audio separation
-        ata_audio_url = voice_audio_url or original_audio_url
-        if ata_audio_url:
-            logger.info(f"[自动翻译] 使用音频URL提交到ATA进行字幕提取: {ata_audio_url}")
-            ata_task_id = await ata_service.submit_audio(ata_audio_url)
-        else:
-            logger.warning(f"[自动翻译] 没有可用音频URL，将回退使用原视频数据提交ATA")
-            ata_task_id = await ata_service.submit_audio_binary(video_data)
-        extract_task.ata_task_id = ata_task_id
-        db.commit()
-        logger.info(f"[自动翻译] 已提交到ATA，任务ID: {ata_task_id}")
-
-        # Wait for completion
-        max_attempts = 60
-        logger.info(f"[自动翻译] 等待字幕提取完成（最多 {max_attempts} 次尝试）")
-        for attempt in range(max_attempts):
-            await asyncio.sleep(10)
-            try:
-                ata_status = await ata_service.get_task_status(ata_task_id)
-                logger.info(f"[自动翻译] ATA状态检查 {attempt + 1}/{max_attempts}: {ata_status.get('code')}")
-                if ata_service.is_task_completed(ata_status):
-                    extract_task.status = ExtractStatus.COMPLETED
-                    extract_task.subtitle_result = json.dumps({"utterances": ata_status.get("utterances", [])}, ensure_ascii=False)
-                    db.commit()
-                    logger.info(f"[自动翻译] 字幕提取成功完成")
-                    break
-                elif ata_service.is_task_failed(ata_status):
-                    extract_task.status = ExtractStatus.FAILED
-                    extract_task.error_message = str(ata_status)
-                    db.commit()
-                    logger.error(f"[自动翻译] 字幕提取失败: {extract_task.error_message}")
-                    raise Exception(f"字幕提取失败: {extract_task.error_message}")
-            except Exception as e:
-                logger.warning(f"[自动翻译] ATA状态检查第 {attempt + 1} 次失败: {str(e)}")
-                if attempt >= max_attempts - 1:
-                    raise
-                await asyncio.sleep(10)
-
-        erasure_video_url = None
-        if skip_subtitle_erasure:
-            logger.info(f"[自动翻译] 步骤 2/3: 已开启跳过字幕擦除，任务ID: {task_id}")
-        else:
-            # Step 2: Subtitle Erasure
-            logger.info(f"[自动翻译] 步骤 2/3: 执行字幕擦除，任务ID: {task_id}")
-            task = db.query(VideoTranslationTask).filter(VideoTranslationTask.id == task_id).first()
-            if task:
-                task.current_stage = "subtitle_erasure"
-                db.commit()
-                logger.info(f"[自动翻译] 更新任务 {task_id} 的当前阶段为字幕擦除")
-
-            # Submit subtitle erasure task
-            presigned_url = oss_service.generate_download_url(oss_key, expires=604800)
-            logger.info(f"[自动翻译] 生成预签名URL用于字幕擦除: {presigned_url[:100]}...")
-            
-            volcengine_response = await volcengine_service.submit_subtitle_erase_task(
-                presigned_url,
-                "Subtitle"
-            )
-            logger.info(f"[自动翻译] 字幕擦除任务已提交，响应: {volcengine_response}")
-            
-            # Wait for subtitle erasure completion
-            erasure_volcengine_task_id = volcengine_response.get("task_id")
-            erasure_max_attempts = 600
-            logger.info(f"[自动翻译] 等待字幕擦除完成（最多 {erasure_max_attempts} 次尝试）")
-            
-            for attempt in range(erasure_max_attempts):
-                await asyncio.sleep(10)
-                try:
-                    erasure_status = await volcengine_service.get_task_status(erasure_volcengine_task_id)
-                    logger.info(f"[自动翻译] 字幕擦除状态检查 {attempt + 1}/{erasure_max_attempts}: {erasure_status.get('status')}")
-                    
-                    if erasure_status.get("status") == "success" or (erasure_status.get("success", False) and "result" in erasure_status):
-                        result = erasure_status.get("result", {})
-                        erasure_video_url = result.get("video_url")
-                        logger.info(f"[自动翻译] 字幕擦除成功完成，结果视频URL: {erasure_video_url}")
-                        break
-                    elif erasure_status.get("status") == "failed" or "error" in erasure_status:
-                        logger.warning(f"[自动翻译] 字幕擦除失败，将使用原视频继续")
-                        erasure_video_url = file_url
-                        break
-                except Exception as e:
-                    logger.warning(f"[自动翻译] 字幕擦除状态检查第 {attempt + 1} 次失败: {str(e)}")
-                    if attempt >= erasure_max_attempts - 1:
-                        logger.warning(f"[自动翻译] 字幕擦除超时，将使用原视频继续")
-                        erasure_video_url = file_url
-        
-        # Use erasure video if available, otherwise use original video
-        final_video_url = erasure_video_url or file_url
-        logger.info(f"[自动翻译] 将使用视频进行翻译: {final_video_url}")
-
-        final_video_ice_url = final_video_url
-        if erasure_video_url:
-            logger.info(f"[自动翻译] 下载字幕擦除结果并上传到OSS用于ICE注册")
-            erasure_response = requests.get(erasure_video_url, timeout=300)
-            erasure_response.raise_for_status()
-            erasure_video_oss_key = f"auto_translate_erased/{task_id}_{original_filename}"
-            oss_service.upload_file(
-                erasure_video_oss_key,
-                io.BytesIO(erasure_response.content),
-                content_type="video/mp4"
-            )
-            final_video_ice_url = f"oss://{settings.OSS_BUCKET_NAME}/{erasure_video_oss_key}"
-            logger.info(f"[自动翻译] 字幕擦除结果已上传到OSS用于ICE注册: {final_video_ice_url}")
-        elif oss_key:
-            final_video_ice_url = f"oss://{settings.OSS_BUCKET_NAME}/{oss_key}"
-            logger.info(f"[自动翻译] 使用原视频OSS地址注册ICE: {final_video_ice_url}")
-
-        # Get subtitles
-        logger.info(f"[自动翻译] 从提取任务 {extract_task.id} 获取字幕数据")
-        if not extract_task.subtitle_result:
-            logger.error(f"[自动翻译] 提取任务 {extract_task.id} 中未找到字幕结果")
-            raise Exception("字幕提取失败，无法获取字幕数据")
-
-        subtitle_data = json.loads(extract_task.subtitle_result).get("utterances", [])
-        logger.info(f"[自动翻译] 获取到 {len(subtitle_data)} 条字幕")
-
-        # Register video with ICE
-        logger.info(f"[自动翻译] 在ICE中注册视频: {final_video_ice_url}")
-        media_id = ice_service.register_media(final_video_ice_url, oss_key, "video")
-        logger.info(f"[自动翻译] 视频已在ICE中注册，媒体ID: {media_id}")
-
-        # Register background audio to ICE if available
-        background_audio_media_id = None
-        current_background_audio_url = background_audio_url or task.background_audio_url
-        logger.info(f"[自动翻译] 准备注册背景音，URL: {current_background_audio_url}")
-        if current_background_audio_url:
-            try:
-                logger.info(f"[自动翻译] 在ICE中注册背景音: {current_background_audio_url}")
-                # Download background audio and upload to OSS for ICE registration
-                logger.info(f"[自动翻译] 下载背景音")
-                async with httpx.AsyncClient(timeout=300.0) as client:
-                    background_audio_response = await client.get(current_background_audio_url)
-                    background_audio_response.raise_for_status()
-                    background_audio_data = background_audio_response.content
-                
-                # Upload background audio to OSS
-                logger.info(f"[自动翻译] 上传背景音到OSS")
-                background_audio_oss_key = f"audio_separation/{task_id}_background.aac"
-                oss_service.upload_file(background_audio_oss_key, background_audio_data)
-                background_oss_url = f"oss://{settings.OSS_BUCKET_NAME}/{background_audio_oss_key}"
-                logger.info(f"[自动翻译] 背景音已上传到OSS: {background_oss_url}")
-                
-                background_audio_media_id = ice_service.register_media(
-                    background_oss_url,
-                    background_audio_oss_key,
-                    "audio"
-                )
-                logger.info(f"[自动翻译] 背景音已在ICE中注册，媒体ID: {background_audio_media_id}")
-                if not background_audio_media_id:
-                    logger.warning(f"[自动翻译] 背景音ICE注册返回空media_id")
-            except Exception as e:
-                logger.warning(f"[自动翻译] 背景音注册失败: {str(e)}，将使用原视频音频")
-        
-        # Submit video translation
-        logger.info(f"[自动翻译] 提交视频翻译到Docker服务")
-        default_subtitle_params = {
-            "alignment": "TopCenter",
-            "font_size": 84,
-            "font_color": "#ffffff",
-            "font": "Alibaba PuHuiTi",
-            "outline": 2,
-            "outline_colour": "#000000",
-            "y": 0.75
-        }
-        subtitle_params_for_render = {
-            **default_subtitle_params,
-            **{key: value for key, value in (subtitle_params or {}).items() if value is not None}
-        }
-
-        language_results = _get_task_language_results(task)
-        first_language = target_languages[0]
-        failed_language = None
-        has_pending_language = False
-        for target_language in target_languages:
-            logger.info(f"[自动翻译] 提交 {target_language} 视频翻译到Docker服务")
-            language_results[target_language] = {
-                **language_results.get(target_language, {}),
-                "status": "processing",
-            }
-            _set_task_language_results(task, language_results)
-            db.commit()
-
-            try:
-                docker_response = await video_translation_service.submit_task(
-                    media_id=media_id,
-                    subtitle_json=subtitle_data,
-                    target_language=target_language,
-                    task_id=task_id,
-                    subtitle_params=subtitle_params_for_render,
-                    background_audio_media_id=background_audio_media_id,
-                    background_audio_url=current_background_audio_url
-                )
-                logger.info(f"[自动翻译] {target_language} Docker服务响应: {docker_response}")
-            except Exception as exc:
-                docker_response = {"status": "failed", "error_message": str(exc)}
-
-            result_status = docker_response.get("status", "processing")
-            language_results[target_language] = {
-                "status": result_status,
-                "docker_task_id": docker_response.get("docker_task_id") or docker_response.get("task_id"),
-                "result_video_url": docker_response.get("result_video_url"),
-                "timeline_json": docker_response.get("timeline_json"),
-                "tts_timestamps": docker_response.get("tts_timestamps"),
-                "error_message": docker_response.get("error_message"),
-            }
-            _set_task_language_results(task, language_results)
-
-            if target_language == first_language:
-                task.docker_task_id = language_results[target_language]["docker_task_id"]
-                task.timeline_json = json.dumps(docker_response.get("timeline_json"), ensure_ascii=False) if docker_response.get("timeline_json") else None
-                task.tts_timestamps = json.dumps(docker_response.get("tts_timestamps"), ensure_ascii=False) if docker_response.get("tts_timestamps") else None
-                task.result_video_url = docker_response.get("result_video_url")
-
-            db.commit()
-
-            if result_status == "failed":
-                failed_language = target_language
-                task.error_message = docker_response.get("error_message", f"{target_language} 视频翻译失败")
-                break
-            if result_status != "completed":
-                has_pending_language = True
-
-        if failed_language:
-            task.status = VideoTranslationStatus.FAILED
-            task.current_stage = None
-            _refund_translation_points(db, task)
-            db.commit()
-            logger.error(f"[自动翻译] 任务 {task_id} 的 {failed_language} 视频翻译失败: {task.error_message}")
-        else:
-            if has_pending_language:
-                task.status = VideoTranslationStatus.PROCESSING
-                task.current_stage = "video_translation"
-                logger.info(f"[自动翻译] 任务 {task_id} 的视频翻译已提交，等待渲染完成")
-            else:
-                task.status = VideoTranslationStatus.COMPLETED
-                task.completed_at = datetime.utcnow()
-                task.current_stage = "completed"
-                logger.info(f"[自动翻译] 任务 {task_id} 的视频翻译全部完成")
-            db.commit()
-        
-        db.commit()
-        logger.info(f"[自动翻译] 自动翻译任务 {task_id} 的工作流已完成")
-        
-    except Exception as e:
-        logger.error(f"[自动翻译] 自动翻译后台任务失败，任务ID: {task_id}，错误: {str(e)}", exc_info=True)
-        try:
-            task = db.query(VideoTranslationTask).filter(VideoTranslationTask.id == task_id).first()
-            if task:
-                task.status = VideoTranslationStatus.FAILED
-                task.error_message = str(e)
-                task.current_stage = None
-                _refund_translation_points(db, task)
-                db.commit()
-                logger.error(f"[自动翻译] 已将任务 {task_id} 标记为失败")
-        except Exception as db_error:
-            logger.error(f"[自动翻译] 更新任务状态失败: {str(db_error)}")
-            db.rollback()
-    finally:
-        try:
             db.close()
-        except:
-            pass
-        logger.info(f"[自动翻译] 任务 {task_id} 的数据库连接已关闭")
 
 
 @router.post("/submit-auto")
@@ -753,6 +445,7 @@ async def submit_auto_translation(
             user_id=current_user.id,
             original_filename=request.original_filename,
             video_oss_key=request.oss_key,
+            original_video_url=request.original_video_url,
             subtitle_source_type="auto",
             subtitle_json=json.dumps([]),
             target_language=target_languages[0],
@@ -761,23 +454,26 @@ async def submit_auto_translation(
             charged_points=required_points,
             status=VideoTranslationStatus.PROCESSING,
             is_auto=True,
-            current_stage="queued"
+            current_stage="queued",
+            tags=json.dumps(request.tags or [], ensure_ascii=False) if request.tags else None
         )
         db.add(task)
         db.commit()
         db.refresh(task)
         
-        subtitle_params = _model_dump_exclude_none(request.subtitle_params) if request.subtitle_params else None
+        request_subtitle_params = _model_dump_exclude_none(request.subtitle_params) if request.subtitle_params else None
+        subtitle_params = _build_backend_auto_subtitle_params(request_subtitle_params)
 
-        # Start background processing
-        asyncio.create_task(process_auto_translation_background(
+        asyncio.create_task(submit_auto_translation_to_fc_background(
             task.id,
             request.oss_key,
             request.file_url,
             request.original_filename,
+            request.target_language,
             target_languages,
             request.skip_subtitle_erasure,
-            subtitle_params
+            subtitle_params,
+            request.custom_voice_id
         ))
 
         return {
@@ -785,7 +481,7 @@ async def submit_auto_translation(
             "status": task.status.value,
             "target_languages": target_languages,
             "charged_points": required_points,
-            "message": "任务已提交，正在排队处理"
+            "message": "任务已提交，正在排队等待 FC 处理"
         }
     except HTTPException:
         db.rollback()
@@ -884,6 +580,7 @@ async def get_video_translation_tasks(
     page: int = 1,
     page_size: int = 10,
     is_auto: bool = None,
+    tags: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -892,6 +589,11 @@ async def get_video_translation_tasks(
     
     if is_auto is not None:
         query = query.filter(VideoTranslationTask.is_auto == is_auto)
+    
+    if tags:
+        tag_list = [tag.strip() for tag in tags.split(',') if tag.strip()]
+        for tag in tag_list:
+            query = query.filter(VideoTranslationTask.tags.like(f'%{tag}%'))
     
     total = query.count()
     tasks = query.order_by(VideoTranslationTask.created_at.desc()).offset(offset).limit(page_size).all()
@@ -987,3 +689,54 @@ async def refresh_video_translation_task_statuses(
         })
     
     return results
+
+
+@router.post("/fc-callback")
+async def fc_callback(
+    request: FcCallbackRequest,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    """接收 FC/Docker Service 的任务状态回调"""
+    # 验证 API Key
+    expected_auth = f"Bearer {settings.CALLBACK_API_KEY}"
+    if authorization not in (expected_auth, settings.CALLBACK_API_KEY):
+        logger.warning(f"Invalid authorization header: {authorization}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized"
+        )
+    
+    logger.info(f"Received FC callback for task {request.task_id}, status: {request.status}")
+    
+    # 查找任务
+    task = db.query(VideoTranslationTask).filter(VideoTranslationTask.id == request.task_id).first()
+    if not task:
+        logger.warning(f"Task {request.task_id} not found")
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # 更新任务状态
+    if request.status == "completed":
+        task.status = VideoTranslationStatus.COMPLETED
+        task.completed_at = datetime.utcnow()
+        task.current_stage = "completed"
+        if request.result_video_url:
+            task.result_video_url = request.result_video_url
+    elif request.status == "failed":
+        task.status = VideoTranslationStatus.FAILED
+        task.error_message = request.error_message
+        task.current_stage = None
+        # 退还积分
+        _refund_translation_points(db, task)
+    elif request.status == "processing":
+        task.status = VideoTranslationStatus.PROCESSING
+        task.current_stage = "video_translation"
+    
+    # 更新语言结果
+    if request.language_results:
+        task.language_results_json = json.dumps(request.language_results, ensure_ascii=False, default=_json_default)
+    
+    db.commit()
+    logger.info(f"Task {request.task_id} updated to status {request.status}")
+    
+    return {"status": "success", "task_id": task.id}

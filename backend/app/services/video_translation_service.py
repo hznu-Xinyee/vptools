@@ -1,6 +1,6 @@
 import httpx
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -56,6 +56,61 @@ class VideoTranslationService:
                 json=payload
             )
             response.raise_for_status()
+            return response.json()
+
+    async def submit_auto_translation(
+        self,
+        task_id: int,
+        oss_key: str,
+        file_url: str,
+        original_filename: str,
+        target_language: Optional[str] = None,
+        target_languages: Optional[List[str]] = None,
+        skip_subtitle_erasure: bool = False,
+        subtitle_params: Optional[Dict[str, Any]] = None,
+        custom_voice_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Submit auto translation task to docker service"""
+        if not self.service_url:
+            logger.warning("VIDEO_TRANSLATION_DOCKER_URL is not configured")
+            return {"status": "failed", "error_message": "Docker service URL not configured"}
+
+        payload = {
+            "task_id": task_id,
+            "oss_key": oss_key,
+            "file_url": file_url,
+            "original_filename": original_filename,
+            "target_language": target_language,
+            "target_languages": target_languages,
+            "skip_subtitle_erasure": skip_subtitle_erasure,
+            "subtitle_params": subtitle_params,
+            "custom_voice_id": custom_voice_id
+        }
+
+        logger.info(
+            "Submitting auto translation task_id=%s oss_key=%s target_languages=%s",
+            task_id,
+            oss_key,
+            target_languages
+        )
+
+        async with httpx.AsyncClient(timeout=1800.0) as client:
+            response = await client.post(
+                f"{self.service_url.rstrip('/')}/auto-translation",
+                json=payload,
+                headers={"x-fc-invocation-type": "Async"}
+            )
+            response.raise_for_status()
+            if response.status_code == 202 or not response.content:
+                return {
+                    "task_id": task_id,
+                    "status": "processing",
+                    "language_results": {
+                        language: {"status": "processing"}
+                        for language in (target_languages or ([target_language] if target_language else []))
+                    },
+                    "message": "FC async invocation accepted"
+                }
             return response.json()
 
 

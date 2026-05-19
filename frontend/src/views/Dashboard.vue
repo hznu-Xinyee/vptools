@@ -314,7 +314,7 @@
               <div class="pt-1">
                 <label class="block text-[11px] text-gray-500 mb-1">目标语言</label>
                 <select v-model="translationTargetLanguage" class="w-full px-2.5 py-2 border border-gray-300 rounded-md bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600">
-                  <option v-for="language in LANGUAGE_OPTIONS" :key="language.code" :value="language.code">{{ language.name }}</option>
+                  <option v-for="language in LANGUAGE_OPTIONS" :key="language.code" :value="language.code">{{ language.name }}（{{ language.voice }} · {{ language.gender }}）</option>
                 </select>
               </div>
 
@@ -466,7 +466,7 @@
         </aside>
 
         <!-- Left Process Config Column -->
-        <aside class="hidden lg:flex w-72 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-3">
+        <aside class="hidden lg:flex w-96 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-3 overflow-y-auto max-h-screen">
           <div class="bg-white rounded-xl border border-gray-200 shadow-sm">
             <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <h3 class="text-sm font-medium text-gray-900">已选择的处理方式</h3>
@@ -515,7 +515,16 @@
                     :class="autoTargetLanguages.includes(language.code) ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm' : 'border-gray-200 bg-white text-gray-700 hover:border-indigo-300'"
                   >
                     <span class="font-medium">{{ language.name }}</span>
-                    <span class="block text-[10px] opacity-70">{{ language.code }}</span>
+                    <span class="block text-[10px] opacity-70">{{ language.voice }} · {{ language.gender }}</span>
+                  </button>
+                  <button
+                    type="button"
+                    @click="openVoiceModal"
+                    :disabled="autoIsProcessing"
+                    class="px-2.5 py-2 rounded-lg border border-dashed border-indigo-300 bg-indigo-50 text-indigo-600 text-left text-xs hover:bg-indigo-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span class="font-medium">更多音色</span>
+                    <span class="block text-[10px] opacity-70">自定义音色库</span>
                   </button>
                 </div>
               </div>
@@ -545,6 +554,70 @@
                 </div>
               </div>
 
+              <div class="pt-1">
+                <label class="block text-[11px] text-gray-500 mb-1">任务标签</label>
+                <div class="flex gap-2">
+                  <input
+                    type="text"
+                    v-model="autoTagInput"
+                    @keyup.enter="addAutoTag"
+                    placeholder="输入标签按回车添加"
+                    :disabled="autoIsProcessing"
+                    class="flex-1 px-2 py-1.5 border border-gray-300 rounded-md bg-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-600 disabled:opacity-50"
+                  />
+                  <button
+                    type="button"
+                    @click="addAutoTag"
+                    :disabled="autoIsProcessing || !autoTagInput.value || !autoTagInput.value.trim()"
+                    class="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-md text-xs font-medium hover:bg-gray-200 transition disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    添加
+                  </button>
+                </div>
+                <div v-if="autoTaskTags.length > 0" class="flex flex-wrap gap-1.5 mt-2">
+                  <span
+                    v-for="tag in autoTaskTags"
+                    :key="tag"
+                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px]"
+                  >
+                    {{ tag }}
+                    <button
+                      type="button"
+                      @click="removeAutoTag(tag)"
+                      :disabled="autoIsProcessing"
+                      class="hover:text-indigo-900 disabled:opacity-50"
+                    >
+                      ×
+                    </button>
+                  </span>
+                </div>
+                <div v-if="autoSavedTags.length > 0 && autoTaskTags.length === 0" class="mt-2">
+                  <div class="text-[10px] text-gray-400 mb-1">快捷选择：</div>
+                  <div class="flex flex-wrap gap-1">
+                    <button
+                      type="button"
+                      v-for="tag in autoSavedTags.slice(0, 6)"
+                      :key="tag"
+                      @click="selectSavedTag(tag)"
+                      :disabled="autoIsProcessing"
+                      class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] hover:bg-gray-200 transition disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {{ tag }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="pt-1">
+                <label class="block text-[11px] text-gray-500 mb-1">字体大小</label>
+                <input
+                  type="number"
+                  v-model.number="autoFontSize"
+                  :disabled="autoIsProcessing"
+                  class="w-full px-2 py-1.5 border border-gray-300 rounded-md bg-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-600 disabled:opacity-50"
+                />
+              </div>
+
               <button @click="startAutoTranslation" :disabled="autoIsProcessing || autoUploadedVideos.length === 0 || autoTargetLanguages.length === 0" :title="autoUploadedVideos.length === 0 ? '请先确认上传视频' : autoTargetLanguages.length === 0 ? '请至少选择一种目标语言' : ''" class="w-full py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed">
                 {{ autoIsProcessing ? '处理中...' : `提交 (消耗${autoTranslationPointCost}积分)` }}
               </button>
@@ -553,21 +626,48 @@
         </aside>
 
         <!-- Center Workspace -->
-        <section class="flex-1 flex items-center justify-center bg-white relative">
-          <div class="w-full h-full flex flex-col items-center justify-center p-6">
+        <section class="flex-1 flex items-start justify-center bg-white relative">
+          <div class="w-full h-full flex flex-col items-center justify-start p-6 pt-20">
             <div class="relative">
-              <video v-if="currentVideoUrl" :src="currentVideoUrl" controls autoplay class="max-w-[80%] max-h-[70vh] rounded-lg shadow"></video>
-              <video v-else-if="autoVideoObjectUrl" :src="autoVideoObjectUrl" controls class="max-w-[80%] max-h-[70vh] rounded-lg shadow"></video>
-              <div v-else-if="autoSelectedHistoryTask" class="w-full max-w-md rounded-xl border border-gray-200 bg-gray-50 px-6 py-8 text-center">
-                <div class="mb-3 text-sm font-medium text-gray-800">{{ autoSelectedHistoryTask.original_filename }}</div>
-                <div class="mb-2 text-xs text-gray-500">当前状态：{{ getAutoStatusText(autoSelectedHistoryTask.status, autoSelectedHistoryTask) }}</div>
-                <div class="text-sm" :class="autoSelectedHistoryTask.status === 'failed' ? 'text-red-600' : 'text-indigo-600'">
-                  {{ autoSelectedHistoryTask.status === 'failed' ? '视频生成失败，请检查任务状态或重新提交' : '视频还在生成中，请继续耐心等待' }}
+              <!-- Two videos side by side when viewing history -->
+              <div v-if="autoSelectedHistoryTask" class="flex gap-6 items-start justify-center w-full">
+                <div class="w-[32vw] max-w-[460px]">
+                  <div class="text-xs text-gray-500 mb-1 text-center">原视频</div>
+                  <div class="w-full max-h-[50vh] flex items-center justify-center">
+                    <video v-if="autoSelectedHistoryTask.original_video_url" :src="autoSelectedHistoryTask.original_video_url" controls class="max-w-full max-h-[50vh] rounded-lg shadow"></video>
+                    <div v-else class="w-full h-[32vh] max-h-[360px] flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
+                      <div class="text-center">
+                        <div class="text-gray-400 text-sm mb-1">无原视频链接</div>
+                        <div class="text-gray-400 text-xs">原视频未保存</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="w-px h-[46vh] bg-gray-300"></div>
+                <div class="w-[32vw] max-w-[460px]">
+                  <div class="text-xs text-gray-500 mb-1 text-center">
+                    {{ getSelectedTaskLanguageName(autoSelectedHistoryTask) }}
+                  </div>
+                  <div class="w-full max-h-[50vh] flex items-center justify-center">
+                    <video v-if="autoSelectedHistoryTask.result_video_url" :src="autoSelectedHistoryTask.result_video_url" controls class="max-w-full max-h-[50vh] rounded-lg shadow"></video>
+                    <div v-else class="w-full h-[32vh] max-h-[360px] flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
+                      <div class="text-center">
+                        <div class="text-sm" :class="autoSelectedHistoryTask.status === 'failed' ? 'text-red-600' : 'text-indigo-600'">
+                          {{ autoSelectedHistoryTask.status === 'failed' ? '视频生成失败' : '视频还在生成中' }}
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1">{{ getAutoStatusText(autoSelectedHistoryTask.status, autoSelectedHistoryTask) }}</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
+              <!-- Single video for uploaded video preview -->
+              <video v-else-if="autoVideoObjectUrl" :src="autoVideoObjectUrl" controls class="max-w-[80%] max-h-[70vh] rounded-lg shadow"></video>
+              <!-- Single video for history (translated only) when not selected -->
+              <video v-else-if="currentVideoUrl" :src="currentVideoUrl" controls autoplay class="max-w-[80%] max-h-[70vh] rounded-lg shadow"></video>
               <div v-else class="text-gray-400 text-sm">暂无视频</div>
             </div>
-            <div v-if="!currentVideoUrl && autoVideoFiles.length > 0" class="mt-4 w-full max-w-[80%]">
+            <div v-if="!currentVideoUrl && !autoSelectedHistoryTask && autoVideoFiles.length > 0" class="mt-4 w-full max-w-[80%]">
               <div class="flex items-center justify-between mb-2">
                 <span class="text-sm font-medium text-gray-700">待上传视频</span>
                 <span class="text-xs text-indigo-600">{{ autoPreviewVideoIndex + 1 }} / {{ autoVideoFiles.length }}</span>
@@ -649,7 +749,7 @@
         </section>
 
         <!-- Right Sidebar Cards -->
-        <aside class="w-full lg:w-80 border-l border-gray-200 bg-gray-50 p-3 space-y-3">
+        <aside class="w-full lg:w-96 border-l border-gray-200 bg-gray-50 p-3 space-y-3">
           <!-- Upload Card -->
           <div class="bg-white rounded-xl border border-gray-200 shadow-sm">
             <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
@@ -683,63 +783,120 @@
                   <p class="text-gray-400 text-xs mt-1">支持 mp4, avi, mov 等（可多选）</p>
                 </template>
                 <div v-else class="w-full">
-                  <img v-if="autoVideoThumbnail && autoVideoFiles.length === 1" :src="autoVideoThumbnail" class="max-w-full h-auto max-h-36 object-contain rounded-lg mb-3 mx-auto" alt="Video thumbnail" />
-                  <p class="text-gray-900 text-xs font-medium text-center mb-2">待上传 {{ autoVideoFiles.length }} 个视频</p>
-                  <div class="max-h-32 overflow-y-auto space-y-1">
-                    <div v-for="(file, index) in autoVideoFiles" :key="index" class="flex items-center justify-between bg-gray-50 rounded px-2 py-1">
-                      <p class="text-gray-900 text-[11px] font-medium truncate flex-1">{{ file.name }}</p>
-                      <p class="text-gray-500 text-[10px] ml-2">{{ formatFileSize(file.size) }}</p>
-                    </div>
-                  </div>
+                  <p class="text-gray-900 text-xs font-medium text-center">待上传 {{ autoVideoFiles.length }} 个视频</p>
                 </div>
               </div>
             </div>
           </div>
 
           <!-- History Card -->
-          <div class="bg-white rounded-xl border border-gray-200 shadow-sm">
+          <div
+            class="bg-white rounded-xl border border-gray-200 shadow-sm transition-all duration-200"
+            :class="isHistoryExpanded ? 'fixed inset-6 z-40 flex flex-col' : ''"
+          >
             <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <h3 class="text-sm font-medium text-gray-900">自动翻译记录</h3>
-              <button @click="refreshAutoTranslationHistory" class="p-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-md transition" :class="{ 'animate-spin': autoIsRefreshing }" title="刷新">
-                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-              </button>
+              <div class="flex gap-1">
+                <button @click="isHistoryExpanded = !isHistoryExpanded" class="p-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-md transition" :title="isHistoryExpanded ? '收起' : '展开'">
+                  <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+                </button>
+                <button @click="refreshAutoTranslationHistory" class="p-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-md transition" :class="{ 'animate-spin': autoIsRefreshing }" title="刷新">
+                  <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                </button>
+              </div>
             </div>
-            <div class="p-3">
-              <div v-if="autoTaskHistory.length === 0" class="text-center py-6 text-gray-400 text-xs">暂无自动翻译记录</div>
-              <div v-else class="space-y-2.5 max-h-[calc(100vh-400px)] overflow-y-auto">
-                <div v-for="task in autoTaskHistory" :key="task.id" @click="playAutoTranslationVideo(task)" class="bg-white rounded-lg p-2.5 border border-gray-200 cursor-pointer hover:border-indigo-400 transition">
+            <div class="p-3" :class="isHistoryExpanded ? 'flex-1 overflow-hidden flex flex-col' : ''">
+              <div v-if="autoAvailableTags.length > 0" class="mb-3">
+                <div class="text-[11px] text-gray-500 mb-2">按标签筛选：</div>
+                <div class="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    @click="filterByTag('')"
+                    class="px-2.5 py-1 rounded-full text-[10px] transition"
+                    :class="!autoFilterTag ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                  >
+                    全部
+                  </button>
+                  <button
+                    v-for="tag in autoAvailableTags"
+                    :key="tag"
+                    type="button"
+                    @click="filterByTag(tag)"
+                    class="px-2.5 py-1 rounded-full text-[10px] transition"
+                    :class="autoFilterTag === tag ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                  >
+                    {{ tag }}
+                  </button>
+                </div>
+              </div>
+              <div class="mb-3">
+                <div class="text-[11px] text-gray-500 mb-2">按语言筛选：</div>
+                <select
+                  v-model="autoFilterLanguage"
+                  @change="filterByLanguage(autoFilterLanguage)"
+                  class="w-full px-2 py-1.5 border border-gray-300 rounded-md bg-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                >
+                  <option value="">全部语言</option>
+                  <option
+                    v-for="lang in LANGUAGE_OPTIONS"
+                    :key="lang.code"
+                    :value="lang.code"
+                  >
+                    {{ lang.name }}
+                  </option>
+                </select>
+              </div>
+              <div v-if="autoExpandedHistory.length === 0" class="text-center py-6 text-gray-400 text-xs">暂无自动翻译记录</div>
+              <div v-else class="overflow-y-auto min-h-0" :class="isHistoryExpanded ? 'grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] items-start gap-3 flex-1 pr-1 pb-3' : 'space-y-2.5 max-h-[calc(100vh-400px)]'">
+                <div
+                  v-for="item in autoExpandedHistory"
+                  :key="item.id"
+                  @click="playExpandedVideo(item)"
+                  class="relative overflow-hidden rounded-lg border border-gray-200 cursor-pointer hover:border-indigo-400 transition bg-white"
+                  :class="isHistoryExpanded ? 'p-0' : 'p-2.5'"
+                >
+                  <div v-if="isHistoryExpanded && (item.result_video_url || item.videoUrl)" class="w-full rounded-t-lg overflow-hidden flex items-center justify-center bg-gray-50">
+                    <video
+                      :src="item.result_video_url || item.videoUrl"
+                      controls
+                      preload="metadata"
+                      class="max-w-full h-auto block"
+                      @click.stop
+                    ></video>
+                  </div>
+                  <div v-else-if="isHistoryExpanded && autoHistoryThumbnails[item.id]" class="w-full rounded-t-lg overflow-hidden flex items-center justify-center bg-gray-50">
+                    <img :src="autoHistoryThumbnails[item.id]" class="max-w-full h-auto block" />
+                  </div>
+                  <div class="relative z-10" :class="isHistoryExpanded ? 'p-2.5' : ''">
                   <div class="flex justify-between items-start gap-2">
                     <div class="flex-1 min-w-0">
-                      <p v-if="editingAutoTaskId !== task.id" class="text-gray-900 text-xs font-medium truncate">{{ task.original_filename }}</p>
+                      <p v-if="editingAutoTaskId !== item.taskId" class="text-gray-900 text-xs font-medium truncate">{{ item.original_filename }}</p>
                       <input v-else v-model="editingAutoTaskName" @click.stop @blur="saveAutoTaskName" @keyup.enter="saveAutoTaskName" @keyup.esc="cancelEditAutoTaskName" ref="autoEditInput" class="text-gray-900 text-xs font-medium w-full border border-indigo-400 rounded px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-indigo-200" />
-                      <p class="text-gray-500 text-[11px] mt-1">{{ formatDate(task.created_at) }}</p>
+                      <p class="text-gray-500 text-[11px] mt-1">{{ formatDate(item.created_at) }}</p>
+                      <p class="text-indigo-600 text-[11px] mt-0.5 font-medium">{{ item.languageName }}</p>
                     </div>
                     <div class="flex flex-col items-end gap-1 shrink-0">
-                      <button @click.stop="startEditAutoTaskName(task)" class="px-2 py-0.5 text-[10px] text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded transition" title="编辑名称">
+                      <button @click.stop="startEditAutoTaskName({ id: item.taskId, original_filename: item.original_filename })" class="px-2 py-0.5 text-[10px] text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded transition" title="编辑名称">
                         编辑
                       </button>
-                      <span class="px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0" :class="getAutoStatusClass(task.status, task)">{{ getAutoStatusText(task.status, task) }}</span>
+                      <span class="px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0" :class="getAutoStatusClass(item.status, item)">{{ getAutoStatusText(item.status, item) }}</span>
                     </div>
                   </div>
-                  <div class="flex justify-between items-center mt-1 gap-2">
-                    <p class="text-gray-500 text-[11px] truncate">{{ getTaskLanguageNames(task) }}</p>
-                  </div>
-                  <div v-if="getCompletedLanguageResults(task).length > 1" class="flex flex-wrap gap-1 mt-2">
-                    <button
-                      v-for="result in getCompletedLanguageResults(task)"
-                      :key="`${task.id}-${result.code}`"
-                      type="button"
-                      @click.stop="playAutoTranslationVideo(task, result.code)"
-                      class="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] hover:bg-indigo-100"
+                  <div v-if="item.tags && item.tags.length > 0" class="flex flex-wrap gap-1 mt-2">
+                    <span
+                      v-for="tag in item.tags"
+                      :key="tag"
+                      class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px]"
                     >
-                      {{ getLanguageName(result.code) }}
-                    </button>
+                      {{ tag }}
+                    </span>
+                  </div>
                   </div>
                 </div>
               </div>
 
               <!-- Pagination Controls for Auto Translation History -->
-              <div class="flex justify-between items-center mt-3 pt-2 border-t border-gray-100">
+              <div class="flex justify-between items-center mt-3 pt-2 border-t border-gray-100 shrink-0 bg-white">
                 <button @click="changeAutoPage(autoCurrentPage - 1)" :disabled="autoCurrentPage === 1" class="px-2.5 py-1 text-[11px] border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">上一页</button>
                 <div class="flex items-center space-x-1 text-[11px] text-gray-600">
                   <span>第</span><span class="font-medium">{{ autoCurrentPage }}</span><span>页 / 共</span><span class="font-medium">{{ autoTotalPages }}</span><span>页</span>
@@ -1033,6 +1190,150 @@
         </div>
       </div>
     </div>
+
+    <!-- Voice List Modal -->
+    <div v-if="showVoiceModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @click="showVoiceModal = false">
+      <div class="bg-white rounded-lg shadow-xl w-[1200px] h-[600px] mx-4 overflow-hidden flex flex-col" @click.stop>
+        <div class="p-4 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
+          <h2 class="text-lg font-semibold text-gray-900">音色列表</h2>
+          <button @click="showVoiceModal = false" class="text-gray-400 hover:text-gray-600">
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div class="p-4 space-y-4 flex-shrink-0">
+          <!-- Filters -->
+          <div class="flex gap-4">
+            <div class="flex-1">
+              <label class="block text-sm font-medium text-gray-700 mb-1">语言筛选</label>
+              <select v-model="voiceFilterLanguage" @change="filterVoices" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600">
+                <option value="">全部语言</option>
+                <option v-for="lang in LANGUAGE_OPTIONS" :key="lang.code" :value="lang.code">{{ lang.name }}</option>
+              </select>
+            </div>
+            <div class="flex-1">
+              <label class="block text-sm font-medium text-gray-700 mb-1">性别筛选</label>
+              <select v-model="voiceFilterGender" @change="filterVoices" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600">
+                <option value="">全部性别</option>
+                <option value="male">男声</option>
+                <option value="female">女声</option>
+                <option value="other">其他</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <!-- Voice List -->
+        <div class="flex-1 overflow-y-auto px-4 pb-4">
+          <div v-if="filteredVoices.length === 0" class="text-center py-8 text-gray-500 text-sm">暂无音色</div>
+          <div class="grid grid-cols-5 gap-3">
+            <div
+              v-for="voice in filteredVoices"
+              :key="voice.id"
+              @click="selectVoice(voice)"
+              class="p-3 rounded-lg border cursor-pointer transition flex flex-col"
+              :class="selectedVoice?.id === voice.id ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:border-indigo-300'"
+            >
+              <div class="flex justify-between items-start flex-shrink-0">
+                <div class="font-medium text-gray-900 text-sm truncate flex-1">{{ voice.name }}</div>
+                <div v-if="selectedVoice?.id === voice.id" class="text-indigo-600 flex-shrink-0 ml-2">
+                  <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                  </svg>
+                </div>
+              </div>
+              <div class="text-xs text-gray-500 mt-1">{{ getLanguageName(voice.language) }} · {{ voice.gender === 'male' ? '男声' : voice.gender === 'female' ? '女声' : '其他' }}</div>
+              <div v-if="voice.description" class="text-xs text-gray-400 mt-1 line-clamp-2">{{ voice.description }}</div>
+            </div>
+          </div>
+        </div>
+        <div class="p-4 border-t border-gray-200 flex justify-between items-center">
+          <button
+            type="button"
+            @click="openAddVoiceModal"
+            class="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 transition"
+          >
+            添加音色
+          </button>
+          <div class="flex gap-2">
+            <button
+              type="button"
+              @click="showVoiceModal = false"
+              class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-50 transition"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              @click="confirmVoiceSelection"
+              :disabled="!selectedVoice"
+              class="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              确认
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Voice Modal -->
+    <div v-if="showAddVoiceModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @click="showAddVoiceModal = false">
+      <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4" @click.stop>
+        <div class="p-4 border-b border-gray-200 flex justify-between items-center">
+          <h2 class="text-lg font-semibold text-gray-900">添加音色</h2>
+          <button @click="showAddVoiceModal = false" class="text-gray-400 hover:text-gray-600">
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div class="p-4 space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">音色名称</label>
+            <input v-model="newVoice.name" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600" placeholder="例如：George" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">音色ID</label>
+            <input v-model="newVoice.voice_id" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600" placeholder="例如：JBFqnCBsd6RMkjVDRZzb" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">语言</label>
+            <select v-model="newVoice.language" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600">
+              <option v-for="lang in LANGUAGE_OPTIONS" :key="lang.code" :value="lang.code">{{ lang.name }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">性别</label>
+            <select v-model="newVoice.gender" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600">
+              <option value="male">男声</option>
+              <option value="female">女声</option>
+              <option value="other">其他</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">音色描述</label>
+            <textarea v-model="newVoice.description" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600" placeholder="可选的音色描述"></textarea>
+          </div>
+        </div>
+        <div class="p-4 border-t border-gray-200 flex justify-end gap-2">
+          <button
+            type="button"
+            @click="showAddVoiceModal = false"
+            class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-50 transition"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            @click="addVoice"
+            :disabled="isAddingVoice || !newVoice.name || !newVoice.voice_id"
+            class="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {{ isAddingVoice ? '添加中...' : '添加' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1048,21 +1349,21 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 const LANGUAGE_OPTIONS = [
-  { code: 'zh', name: '中文' },
-  { code: 'en', name: '英语' },
-  { code: 'ja', name: '日语' },
-  { code: 'ko', name: '韩语' },
-  { code: 'th', name: '泰语' },
-  { code: 'vi', name: '越南语' },
-  { code: 'es', name: '西班牙语' },
-  { code: 'fr', name: '法语' },
-  { code: 'de', name: '德语' },
-  { code: 'id', name: '印尼语' },
-  { code: 'ms', name: '马来语' },
-  { code: 'fil', name: '菲律宾语' },
-  { code: 'ru', name: '俄语' },
-  { code: 'it', name: '意大利语' },
-  { code: 'yue', name: '粤语' }
+  { code: 'zh', name: '中文', voice: 'xiaoyun', gender: '女声' },
+  { code: 'en', name: '英语', voice: 'abby_ecmix', gender: '女声' },
+  { code: 'ja', name: '日语', voice: 'tomoka', gender: '女声' },
+  { code: 'ko', name: '韩语', voice: 'Kyong', gender: '女声' },
+  { code: 'th', name: '泰语', voice: 'waan', gender: '女声' },
+  { code: 'vi', name: '越南语', voice: 'tien', gender: '女声' },
+  { code: 'es', name: '西班牙语', voice: 'camila', gender: '女声' },
+  { code: 'fr', name: '法语', voice: 'clara', gender: '女声' },
+  { code: 'de', name: '德语', voice: 'hanna', gender: '女声' },
+  { code: 'id', name: '印尼语', voice: 'indah', gender: '女声' },
+  { code: 'ms', name: '马来语', voice: 'farah', gender: '女声' },
+  { code: 'fil', name: '菲律宾语', voice: 'tala', gender: '女声' },
+  { code: 'ru', name: '俄语', voice: 'masha', gender: '女声' },
+  { code: 'it', name: '意大利语', voice: 'perla', gender: '女声' },
+  { code: 'yue', name: '粤语', voice: 'kelly', gender: '女声' }
 ]
 
 const DEFAULT_AUTO_SUBTITLE_PARAMS = {
@@ -1222,7 +1523,21 @@ const showLoginModal = ref(false)
 const userPoints = ref(0)
 const loginForm = ref({ username: '', password: '' })
 const loginError = ref('')
+
+// Voice modal state
+const showVoiceModal = ref(false)
+const showAddVoiceModal = ref(false)
+const customVoices = ref([])
+const filteredVoices = ref([])
+const selectedVoice = ref(null)
+const voiceFilterLanguage = ref('')
+const voiceFilterGender = ref('')
+const newVoice = ref({ name: '', voice_id: '', language: 'zh', gender: 'female', description: '' })
+const isAddingVoice = ref(false)
 const isLoggingIn = ref(false)
+
+// History expand state
+const isHistoryExpanded = ref(false)
 
 const handleLogout = () => {
   authStore.logout()
@@ -1260,6 +1575,86 @@ const handleLoginSubmit = async () => {
     loginError.value = '登录失败，请稍后重试'
   } finally {
     isLoggingIn.value = false
+  }
+}
+
+// Voice modal functions
+const openVoiceModal = async () => {
+  showVoiceModal.value = true
+  await fetchCustomVoices()
+  filterVoices()
+}
+
+const openAddVoiceModal = () => {
+  showAddVoiceModal.value = true
+  newVoice.value = { name: '', voice_id: '', language: 'zh', gender: 'female', description: '' }
+}
+
+const fetchCustomVoices = async () => {
+  try {
+    const token = localStorage.getItem('token')
+    const response = await axios.get('/api/custom-voices', {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    customVoices.value = response.data
+  } catch (error) {
+    console.error('Failed to fetch custom voices:', error)
+    customVoices.value = []
+  }
+}
+
+const filterVoices = () => {
+  filteredVoices.value = customVoices.value.filter(voice => {
+    const languageMatch = !voiceFilterLanguage.value || voice.language === voiceFilterLanguage.value
+    const genderMatch = !voiceFilterGender.value || voice.gender === voiceFilterGender.value
+    return languageMatch && genderMatch
+  })
+}
+
+const selectVoice = (voice) => {
+  selectedVoice.value = voice
+}
+
+const confirmVoiceSelection = () => {
+  if (selectedVoice.value) {
+    // Add the custom voice to the language selection
+    const customLang = {
+      code: selectedVoice.value.language,
+      name: selectedVoice.value.name,
+      voice: selectedVoice.value.voice_id,
+      gender: selectedVoice.value.gender === 'male' ? '男声' : selectedVoice.value.gender === 'female' ? '女声' : '其他',
+      isCustom: true,
+      customVoiceId: selectedVoice.value.id
+    }
+    // Replace the default language with custom voice
+    const existingIndex = autoTargetLanguages.value.findIndex(lang => lang === selectedVoice.value.language)
+    if (existingIndex === -1) {
+      autoTargetLanguages.value.push(selectedVoice.value.language)
+    }
+    showVoiceModal.value = false
+  }
+}
+
+const addVoice = async () => {
+  if (!newVoice.value.name || !newVoice.value.voice_id) {
+    return
+  }
+  
+  isAddingVoice.value = true
+  try {
+    const token = localStorage.getItem('token')
+    const response = await axios.post('/api/custom-voices', newVoice.value, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    customVoices.value.push(response.data)
+    filterVoices()
+    showAddVoiceModal.value = false
+    newVoice.value = { name: '', voice_id: '', language: 'zh', gender: 'female', description: '' }
+  } catch (error) {
+    console.error('Failed to add voice:', error)
+    alert('添加音色失败，请稍后重试')
+  } finally {
+    isAddingVoice.value = false
   }
 }
 
@@ -1362,6 +1757,20 @@ const showAutoSubtitleStyleModal = ref(false)
 const editingAutoTaskId = ref(null)
 const editingAutoTaskName = ref('')
 const autoEditInput = ref(null)
+const autoTaskTags = ref([])
+const autoTagInput = ref('')
+const autoSavedTags = ref([])
+const autoFontSize = ref(80)
+
+try {
+  const saved = localStorage.getItem('autoSavedTags')
+  if (saved) {
+    autoSavedTags.value = JSON.parse(saved)
+  }
+} catch (e) {
+  console.warn('Failed to load saved tags:', e)
+  autoSavedTags.value = []
+}
 
 const API_BASE = '/api'
 
@@ -1507,7 +1916,8 @@ const toggleAutoTargetLanguage = (languageCode) => {
 
 const buildAutoSubtitleParams = () => ({
   ...DEFAULT_AUTO_SUBTITLE_PARAMS,
-  ...selectedAutoSubtitleStyle.value.params
+  ...selectedAutoSubtitleStyle.value.params,
+  font_size: autoFontSize.value
 })
 
 const openAutoSubtitleStyleModal = () => {
@@ -2196,12 +2606,15 @@ const getAutoStatusClass = (status, task = null) => {
 
 const formatDate = (dateString) => {
   const date = new Date(dateString)
-  return date.toLocaleString('zh-CN', {
+  // Convert to Beijing time (UTC+8)
+  const beijingTime = new Date(date.getTime() + (8 * 60 * 60 * 1000) + (date.getTimezoneOffset() * 60 * 1000))
+  return beijingTime.toLocaleString('zh-CN', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
+    timeZone: 'Asia/Shanghai'
   })
 }
 
@@ -2217,6 +2630,11 @@ const handleAutoVideoSelect = async (e) => {
       URL.revokeObjectURL(autoVideoObjectUrl.value)
     }
     autoVideoObjectUrl.value = URL.createObjectURL(autoVideoFiles.value[0])
+    // Clear history video URL to ensure preview shows the new video
+    currentVideoUrl.value = ''
+    autoSelectedHistoryTask.value = null
+    currentPlayingTask.value = null
+    currentPlayingLanguage.value = null
     e.target.value = ''
   }
 }
@@ -2342,6 +2760,15 @@ const startAutoTranslation = async () => {
 
   autoIsProcessing.value = true
 
+  // Save tags to localStorage for future use
+  if (autoTaskTags.value.length > 0) {
+    const newTags = autoTaskTags.value.filter(tag => !autoSavedTags.value.includes(tag))
+    if (newTags.length > 0) {
+      autoSavedTags.value = [...new Set([...autoSavedTags.value, ...newTags])]
+      localStorage.setItem('autoSavedTags', JSON.stringify(autoSavedTags.value))
+    }
+  }
+
   // Show success card immediately
   showSubmitSuccessCard.value = true
   setTimeout(() => {
@@ -2361,8 +2788,11 @@ const startAutoTranslation = async () => {
           target_languages: autoTargetLanguages.value,
           oss_key: uploadedVideo.ossKey,
           file_url: fileUrl,
+          original_video_url: fileUrl,
           skip_subtitle_erasure: autoSkipSubtitleErasure.value,
-          subtitle_params: buildAutoSubtitleParams()
+          subtitle_params: buildAutoSubtitleParams(),
+          tags: autoTaskTags.value,
+          custom_voice_id: selectedVoice.value ? selectedVoice.value.id : null
         },
         {
           headers: {
@@ -2386,6 +2816,7 @@ const startAutoTranslation = async () => {
     autoTargetLanguages.value = ['en']
     autoSkipSubtitleErasure.value = false
     autoSubtitleStyleId.value = 'default'
+    autoTaskTags.value = []
     
     // Reload history to show the new task after animation
     setTimeout(async () => {
@@ -2470,25 +2901,184 @@ const pollEraseTaskCompletion = async (taskId) => {
   throw new Error('字幕擦除超时')
 }
 
+const autoFilterTag = ref('')
+const autoFilterLanguage = ref('')
+const autoAvailableTags = ref([])
+const autoExpandedHistory = ref([])
+const autoHistoryThumbnails = ref({})
+
+const generateHistoryVideoThumbnail = (item) => {
+  const videoUrl = item.result_video_url || item.videoUrl
+  if (!videoUrl || autoHistoryThumbnails.value[item.id]) return
+
+  const video = document.createElement('video')
+  video.crossOrigin = 'anonymous'
+  video.muted = true
+  video.preload = 'metadata'
+  video.src = videoUrl
+
+  const cleanup = () => {
+    video.removeAttribute('src')
+    video.load()
+  }
+
+  video.onloadeddata = () => {
+    try {
+      video.currentTime = Math.min(1, video.duration || 1)
+    } catch (error) {
+      cleanup()
+    }
+  }
+
+  video.onseeked = () => {
+    try {
+      const canvas = document.createElement('canvas')
+      const videoWidth = video.videoWidth || 320
+      const videoHeight = video.videoHeight || 180
+      const maxThumbWidth = 320
+      const scale = Math.min(1, maxThumbWidth / videoWidth)
+      canvas.width = Math.round(videoWidth * scale)
+      canvas.height = Math.round(videoHeight * scale)
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+      autoHistoryThumbnails.value = {
+        ...autoHistoryThumbnails.value,
+        [item.id]: canvas.toDataURL('image/jpeg', 0.72)
+      }
+    } catch (error) {
+      console.warn('Failed to generate history thumbnail:', error)
+    } finally {
+      cleanup()
+    }
+  }
+
+  video.onerror = cleanup
+}
+
 const loadAutoTranslationHistory = async () => {
   try {
+    const params = {
+      is_auto: true,
+      page: 1,
+      page_size: 100
+    }
     const response = await axios.get(
       `${API_BASE}/video-translation/tasks`,
       {
-        params: {
-          is_auto: true,
-          page: autoCurrentPage.value,
-          page_size: autoPageSize.value
-        },
+        params,
         headers: {
           'Authorization': `Bearer ${authStore.token}`
         }
       }
     )
-    autoTaskHistory.value = response.data.items
-    autoTotalPages.value = response.data.total_pages
+    
+    // Extract all unique tags from history
+    const allTags = new Set()
+    const expandedItems = []
+    
+    response.data.items.forEach(task => {
+      if (task.tags && Array.isArray(task.tags)) {
+        task.tags.forEach(tag => allTags.add(tag))
+      }
+      
+      // Expand task into individual language video items
+      const taskHasResults = task.language_results && typeof task.language_results === 'object' && Object.keys(task.language_results).length > 0
+      
+      if (taskHasResults) {
+        Object.entries(task.language_results).forEach(([langCode, result]) => {
+          expandedItems.push({
+            id: `${task.id}-${langCode}`,
+            taskId: task.id,
+            original_filename: task.original_filename,
+            languageCode: langCode,
+            languageName: getLanguageName(langCode),
+            videoUrl: result?.result_video_url || null,
+            result_video_url: result?.result_video_url || null,
+            original_video_url: task.original_video_url || null,
+            target_languages: [langCode],
+            status: result?.status || task.status,
+            current_stage: task.current_stage,
+            created_at: task.created_at,
+            tags: task.tags || []
+          })
+        })
+      } else {
+        // Only add main entry if there are no language_results
+        expandedItems.push({
+          id: `${task.id}-main`,
+          taskId: task.id,
+          original_filename: task.original_filename,
+          languageCode: task.target_language || '',
+          languageName: task.target_language ? getLanguageName(task.target_language) : '',
+          videoUrl: task.result_video_url || null,
+          result_video_url: task.result_video_url || null,
+          original_video_url: task.original_video_url || null,
+          target_languages: task.target_languages || (task.target_language ? [task.target_language] : []),
+          status: task.status,
+          current_stage: task.current_stage,
+          created_at: task.created_at,
+          tags: task.tags || []
+        })
+      }
+    })
+    
+    autoAvailableTags.value = Array.from(allTags)
+    
+    // Filter by tag and language
+    let filteredItems = expandedItems
+    if (autoFilterTag.value) {
+      filteredItems = filteredItems.filter(item => 
+        item.tags && item.tags.includes(autoFilterTag.value)
+      )
+    }
+    if (autoFilterLanguage.value) {
+      filteredItems = filteredItems.filter(item => 
+        item.languageCode === autoFilterLanguage.value
+      )
+    }
+    
+    // Pagination for expanded items
+    const startIndex = (autoCurrentPage.value - 1) * autoPageSize.value
+    const endIndex = startIndex + autoPageSize.value
+    autoExpandedHistory.value = filteredItems.slice(startIndex, endIndex)
+    autoExpandedHistory.value.forEach(generateHistoryVideoThumbnail)
+    autoTotalPages.value = Math.ceil(filteredItems.length / autoPageSize.value) || 1
   } catch (error) {
     console.error('Failed to load auto translation history:', error)
+  }
+}
+
+const filterByTag = (tag) => {
+  autoFilterTag.value = tag
+  autoCurrentPage.value = 1
+  loadAutoTranslationHistory()
+}
+
+const getSelectedTaskLanguageName = (task) => {
+  if (!task || !task.target_languages || task.target_languages.length === 0) {
+    return '翻译后'
+  }
+  const langCode = task.target_languages[0]
+  const langOpt = LANGUAGE_OPTIONS.find(o => o.code === langCode)
+  return langOpt ? `${langOpt.name}` : '翻译后'
+}
+
+const filterByLanguage = (langCode) => {
+  autoFilterLanguage.value = langCode
+  autoCurrentPage.value = 1
+  loadAutoTranslationHistory()
+}
+
+const playExpandedVideo = (item) => {
+  currentVideoUrl.value = ''
+  autoVideoObjectUrl.value = ''
+  autoSelectedHistoryTask.value = {
+    original_filename: item.original_filename,
+    original_video_url: item.original_video_url || null,
+    result_video_url: item.result_video_url || item.videoUrl || null,
+    target_languages: item.target_languages || (item.languageCode ? [item.languageCode] : []),
+    status: item.status,
+    current_stage: item.current_stage
   }
 }
 
@@ -2563,6 +3153,25 @@ const saveAutoTaskName = async () => {
     console.error('Failed to update auto task name:', error)
     alert('更新失败: ' + (error.response?.data?.detail || error.message))
     cancelEditAutoTaskName()
+  }
+}
+
+const addAutoTag = () => {
+  if (!autoTagInput.value) return
+  const tag = autoTagInput.value.trim()
+  if (tag && !autoTaskTags.value.includes(tag)) {
+    autoTaskTags.value.push(tag)
+    autoTagInput.value = ''
+  }
+}
+
+const removeAutoTag = (tag) => {
+  autoTaskTags.value = autoTaskTags.value.filter(t => t !== tag)
+}
+
+const selectSavedTag = (tag) => {
+  if (!autoTaskTags.value.includes(tag)) {
+    autoTaskTags.value.push(tag)
   }
 }
 

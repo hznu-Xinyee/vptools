@@ -31,6 +31,7 @@ class TranslateVideoRequest(BaseModel):
     subtitle_params: Optional[SubtitleParams] = None
     background_audio_media_id: Optional[str] = Field(None, description="Background audio media ID after music demix")
     background_audio_url: Optional[str] = Field(None, description="Background audio URL after music demix")
+    custom_voice_id: Optional[str] = Field(None, description="Custom ElevenLabs voice ID")
 
 
 class TranslateVideoResponse(BaseModel):
@@ -43,3 +44,22 @@ class TranslateVideoResponse(BaseModel):
     tts_timestamps: Optional[List[Dict[str, Any]]] = None
     summary_path: Optional[str] = None
     message: Optional[str] = None
+
+
+class AutoTranslationRequest(BaseModel):
+    task_id: int
+    oss_key: str
+    file_url: str
+    original_filename: str
+    target_language: Optional[str] = None
+    target_languages: Optional[List[str]] = None
+    skip_subtitle_erasure: bool = False
+    custom_voice_id: Optional[str] = Field(None, description="Custom ElevenLabs voice ID")
+    subtitle_params: Optional[SubtitleParams] = None
+
+
+class AutoTranslationResponse(BaseModel):
+    task_id: int
+    status: str
+    language_results: Optional[Dict[str, Any]] = None
+    error_message: Optional[str] = None

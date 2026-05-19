@@ -4,12 +4,13 @@ import json
 import httpx
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
-from app.schemas import TranslateVideoRequest, TranslateVideoResponse
+from app.schemas import TranslateVideoRequest, TranslateVideoResponse, AutoTranslationRequest, AutoTranslationResponse
 from app.translation_service import translation_service
 from app.tts_service import tts_service
 from app.oss_service import oss_service
 from app.timeline_service import timeline_service
 from app.ice_service import ice_service
+from app.auto_translation_service import auto_translation_service
 
 app = FastAPI(title="VP Video Translation Docker Service", version="0.1.0")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -118,6 +119,43 @@ def _write_translation_summary(
 @app.get("/health")
 def health_check():
     return {"status": "healthy"}
+
+
+@app.post("/auto-translation", response_model=AutoTranslationResponse)
+async def submit_auto_translation(
+    request: AutoTranslationRequest
+):
+    """Submit auto translation task for FC async invocation"""
+    try:
+        # Normalize target languages
+        raw_languages = request.target_languages if request.target_languages is not None else ([request.target_language] if request.target_language else [])
+        target_languages = []
+        seen = set()
+        for language in raw_languages:
+            normalized = str(language).strip() if language is not None else ""
+            if normalized and normalized not in seen:
+                target_languages.append(normalized)
+                seen.add(normalized)
+
+        if not target_languages:
+            raise HTTPException(status_code=400, detail="请至少选择一种目标语言")
+
+        result = await auto_translation_service.process_auto_translation(
+            request.task_id,
+            request.oss_key,
+            request.file_url,
+            request.original_filename,
+            target_languages,
+            request.skip_subtitle_erasure,
+            request.subtitle_params.model_dump() if request.subtitle_params else None
+        )
+
+        return AutoTranslationResponse(**result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("submit_auto_translation failed task_id=%s", request.task_id)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/translate-video", response_model=TranslateVideoResponse)

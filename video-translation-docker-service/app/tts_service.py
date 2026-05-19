@@ -13,6 +13,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import websockets
 from websockets.exceptions import ConnectionClosed
 
+from app.elevenlabs_service import elevenlabs_service
+
 try:
     from aliyunsdkcore.client import AcsClient
     from aliyunsdkcore.request import CommonRequest
@@ -179,17 +181,27 @@ class TTSService:
         )
         return spec.default_sample_rate
 
-    async def synthesize(self, text: str, language: str) -> bytes:
-        return (await self.synthesize_with_timestamps(text, language)).audio_data
+    async def synthesize(self, text: str, language: str, voice_id: Optional[str] = None) -> bytes:
+        return (await self.synthesize_with_timestamps(text, language, voice_id)).audio_data
 
-    async def synthesize_with_timestamps(self, text: str, language: str) -> TTSResult:
+    async def synthesize_with_timestamps(self, text: str, language: str, voice_id: Optional[str] = None) -> TTSResult:
+        if not text or not text.strip():
+            return TTSResult(audio_data=b"", timestamps=[])
+
+        # Use ElevenLabs if custom voice_id is provided
+        if voice_id:
+            logger.info(f"Using ElevenLabs TTS with voice_id={voice_id}")
+            try:
+                audio_data = await elevenlabs_service.synthesize(text, voice_id)
+                return TTSResult(audio_data=audio_data, timestamps=[])
+            except Exception as e:
+                logger.error(f"ElevenLabs TTS failed, falling back to Aliyun: {str(e)}")
+
         if not settings.ALIYUN_NLS_APPKEY:
             logger.warning("Aliyun NLS appkey is not configured, skipping TTS")
             return TTSResult(audio_data=b"", timestamps=[])
         if not settings.ALIYUN_NLS_TOKEN and not self._has_token_credentials():
             logger.warning("Aliyun NLS token or token credentials are not configured, skipping TTS")
-            return TTSResult(audio_data=b"", timestamps=[])
-        if not text or not text.strip():
             return TTSResult(audio_data=b"", timestamps=[])
 
         spec, canonical = self.resolve_voice(language)

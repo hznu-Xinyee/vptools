@@ -37,6 +37,20 @@ class Settings(BaseSettings):
     ALIYUN_ICE_REGION_ID: str = "cn-shanghai"
     ALIYUN_ICE_OUTPUT_PATH: str = "video_translation/output"
 
+    # ATA Configuration for subtitle extraction
+    ATA_APPID: str
+    ATA_ACCESS_TOKEN: str
+
+    # VolcEngine Configuration for subtitle erasure and audio separation
+    VOLCENGINE_API_KEY: str
+
+    # Backend Callback Configuration
+    BACKEND_URL: Optional[str] = None
+    CALLBACK_API_KEY: Optional[str] = None
+
+    # ElevenLabs Configuration for custom voices
+    ELEVENLABS_API_KEY: Optional[str] = None
+
     class Config:
         env_file = ".env"
         extra = "ignore"

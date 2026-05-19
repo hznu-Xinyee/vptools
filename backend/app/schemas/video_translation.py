@@ -21,12 +21,14 @@ class VideoTranslationSubmitRequest(BaseModel):
     video_oss_key: str = Field(..., description="OSS key of the uploaded video")
     media_id: Optional[str] = Field(None, description="ICE media ID of the uploaded video")
     video_url: Optional[str] = Field(None, description="URL of the uploaded video")
+    original_video_url: Optional[str] = Field(None, description="Original video URL with OSS signature")
     original_filename: str = Field(..., description="Original video filename")
     target_language: str = Field(..., description="Target translation language")
     subtitle_source_type: str = Field(default="upload", description="upload or extract_history")
     subtitle_json: Optional[Any] = Field(None, description="Subtitle JSON data")
     subtitle_extract_task_id: Optional[int] = Field(None, description="Subtitle extraction task ID")
     subtitle_params: Optional[SubtitleParams] = None
+    tags: Optional[List[str]] = Field(None, description="Task tags")
 
 
 class VideoTranslationSubmitResponse(BaseModel):

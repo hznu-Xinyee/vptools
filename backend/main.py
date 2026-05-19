@@ -2,14 +2,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Request, Response
 import logging
-from app.core.database import engine, Base
+from app.core.database import engine, Base, ensure_tags_column
 from app.routers import auth_router, subtitle_task_router, subtitle_extract_router, video_translation_router
+from app.routers.custom_voice import router as custom_voice_router
 
 # Enable detailed logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 Base.metadata.create_all(bind=engine)
+ensure_tags_column()
 
 app = FastAPI(title="VP Backend", version="1.0.0")
 
@@ -37,6 +39,7 @@ app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(subtitle_task_router, prefix="/api/subtitle", tags=["subtitle"])
 app.include_router(subtitle_extract_router, prefix="/api/subtitle-extract", tags=["subtitle-extract"])
 app.include_router(video_translation_router, prefix="/api/video-translation", tags=["video-translation"])
+app.include_router(custom_voice_router, prefix="/api", tags=["custom-voice"])
 
 
 @app.get("/")

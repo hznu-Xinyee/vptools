@@ -19,6 +19,7 @@ class VideoTranslationTask(Base):
     original_filename = Column(String, nullable=False)
     video_oss_key = Column(String, nullable=False)
     video_url = Column(String, nullable=True)
+    original_video_url = Column(String, nullable=True)
     subtitle_source_type = Column(String, nullable=False)
     subtitle_extract_task_id = Column(Integer, nullable=True)
     subtitle_json = Column(Text, nullable=False)
@@ -36,6 +37,8 @@ class VideoTranslationTask(Base):
     background_audio_url = Column(String, nullable=True)  # Background audio after music demix
     charged_points = Column(Integer, default=0, nullable=False)
     points_refunded = Column(Boolean, default=False, nullable=False)
+    tags = Column(Text, nullable=True)
+    custom_voice_id = Column(Integer, nullable=True)  # Custom voice ID if using ElevenLabs
     refunded_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

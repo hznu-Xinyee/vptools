@@ -15,11 +15,21 @@ class OSSService:
         self.bucket.put_object(key, io.BytesIO(audio_data), headers={"Content-Type": content_type})
         return key
 
+    def upload_file(self, key: str, data, content_type: str = None) -> str:
+        if isinstance(data, bytes):
+            data = io.BytesIO(data)
+        headers = {"Content-Type": content_type} if content_type else {}
+        self.bucket.put_object(key, data, headers=headers)
+        return key
+
     def get_file_url(self, key: str) -> str:
         return f"https://{settings.OSS_BUCKET_NAME}.{settings.OSS_ENDPOINT.replace('https://', '')}/{key}"
 
     def generate_download_url(self, key: str, expires: int = 604800) -> str:
         return self.bucket.sign_url("GET", key, expires)
+
+    def generate_presigned_url(self, key: str, expires: int = 3600, method: str = 'GET') -> str:
+        return self.bucket.sign_url(method, key, expires)
 
 
 oss_service = OSSService()

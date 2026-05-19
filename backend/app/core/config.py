@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     # Video Translation Docker Service
     VIDEO_TRANSLATION_DOCKER_URL: Optional[str] = None
 
+    # FC/Docker Service Callback API Key
+    CALLBACK_API_KEY: str = "your-callback-api-key-change-in-production"
+
     # Aliyun ICE Configuration
     ALIYUN_ICE_ACCESS_KEY_ID: Optional[str] = None
     ALIYUN_ICE_ACCESS_KEY_SECRET: Optional[str] = None

@@ -123,19 +123,20 @@ class TranslationService:
     async def translate_subtitles_with_timestamps(self, subtitles: list, target_language: str, max_retries: int = 3) -> list[dict]:
         target_language_name = self._target_language_name(target_language)
         if not settings.GEMINI_API_KEY:
-            return [
+            formatted_subtitles = [
                 {
-                    "start_time": subtitle.words[0]["start_time"] if subtitle.words else subtitle.start_time,
-                    "end_time": subtitle.end_time,
-                    "text": subtitle.text
+                    "start_time": subtitle.get('words', [{}])[0].get('start_time', subtitle.get('start_time')) if subtitle.get('words') else subtitle.get('start_time'),
+                    "end_time": subtitle.get('end_time'),
+                    "text": subtitle.get('text', '')
                 }
                 for subtitle in subtitles
             ]
+            return formatted_subtitles
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         original_subtitles = "\n".join(
             [
-                f"{self._format_timestamp(subtitle.words[0]['start_time'] if subtitle.words else subtitle.start_time)}\n→\n{self._format_timestamp(subtitle.end_time)}\n{subtitle.text}"
+                f"{self._format_timestamp(subtitle.get('words', [{}])[0].get('start_time', subtitle.get('start_time')) if subtitle.get('words') else subtitle.get('start_time'))}\n→\n{self._format_timestamp(subtitle.get('end_time'))}\n{subtitle.get('text', '')}"
                 for subtitle in subtitles
             ]
         )
