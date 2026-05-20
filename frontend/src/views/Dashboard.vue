@@ -3,23 +3,41 @@
 
     <!-- Floating User Info Card (Bottom Left) -->
     <div class="fixed bottom-4 left-4 z-50">
-      <div v-if="!authStore.isAuthenticated" class="bg-white rounded-xl border border-gray-200 shadow-lg p-4 min-w-[200px]">
-        <button @click="showLoginModal = true" class="w-full py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 transition">
-          登录
-        </button>
+      <!-- Collapsed Circle -->
+      <div v-if="!isUserCardExpanded" @click="isUserCardExpanded = true" class="w-14 h-14 bg-indigo-600 rounded-full shadow-lg flex items-center justify-center cursor-pointer hover:bg-indigo-700 transition">
+        <span class="text-white text-lg font-semibold">{{ authStore.isAuthenticated ? (authStore.user?.username?.[0]?.toUpperCase() || 'U') : 'L' }}</span>
       </div>
-      <div v-else class="bg-white rounded-xl border border-gray-200 shadow-lg p-4 min-w-[200px]">
-        <div class="mb-3">
-          <p class="text-xs text-gray-500 mb-1">账号</p>
-          <p class="text-sm font-medium text-gray-900 truncate">{{ authStore.user?.username || '用户' }}</p>
+
+      <!-- Expanded Card -->
+      <div v-else class="relative">
+        <div v-if="!authStore.isAuthenticated" class="bg-white rounded-xl border border-gray-200 shadow-lg p-4 min-w-[200px]">
+          <button @click="isUserCardExpanded = false" class="absolute top-2 right-2 w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-600 transition">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <button @click="showLoginModal = true" class="w-full py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 transition">
+            登录
+          </button>
         </div>
-        <div class="mb-3">
-          <p class="text-xs text-gray-500 mb-1">积分</p>
-          <p class="text-sm font-medium text-gray-900">{{ userPoints || 0 }}</p>
+        <div v-else class="bg-white rounded-xl border border-gray-200 shadow-lg p-4 min-w-[200px]">
+          <button @click="isUserCardExpanded = false" class="absolute top-2 right-2 w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-600 transition">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <div class="mb-3">
+            <p class="text-xs text-gray-500 mb-1">账号</p>
+            <p class="text-sm font-medium text-gray-900 truncate">{{ authStore.user?.username || '用户' }}</p>
+          </div>
+          <div class="mb-3">
+            <p class="text-xs text-gray-500 mb-1">积分</p>
+            <p class="text-sm font-medium text-gray-900">{{ userPoints || 0 }}</p>
+          </div>
+          <button @click="handleLogout" class="w-full py-2 bg-gray-100 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-200 transition">
+            退出登录
+          </button>
         </div>
-        <button @click="handleLogout" class="w-full py-2 bg-gray-100 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-200 transition">
-          退出登录
-        </button>
       </div>
     </div>
 
@@ -88,10 +106,10 @@
               <div class="relative">
                 <el-upload
                   ref="uploadRef"
+                  v-model:file-list="fileList"
                   :auto-upload="false"
                   :on-change="handleFileSelect"
                   :on-remove="handleFileRemove"
-                  :file-list="fileList"
                   multiple
                   accept="video/*"
                   :disabled="isUploading"
@@ -791,10 +809,10 @@
 
           <!-- History Card -->
           <div
-            class="bg-white rounded-xl border border-gray-200 shadow-sm transition-all duration-200"
-            :class="isHistoryExpanded ? 'fixed inset-6 z-40 flex flex-col' : ''"
+            class="bg-white rounded-xl border border-gray-200 shadow-sm transition-all duration-200 flex flex-col"
+            :class="isHistoryExpanded ? 'fixed inset-6 z-40' : 'max-h-[calc(100vh-240px)]'"
           >
-            <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0">
               <h3 class="text-sm font-medium text-gray-900">自动翻译记录</h3>
               <div class="flex gap-1">
                 <button @click="isHistoryExpanded = !isHistoryExpanded" class="p-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-md transition" :title="isHistoryExpanded ? '收起' : '展开'">
@@ -805,7 +823,7 @@
                 </button>
               </div>
             </div>
-            <div class="p-3" :class="isHistoryExpanded ? 'flex-1 overflow-hidden flex flex-col' : ''">
+            <div class="p-3 flex-1 overflow-y-auto min-h-0">
               <div v-if="autoAvailableTags.length > 0" class="mb-3">
                 <div class="text-[11px] text-gray-500 mb-2">按标签筛选：</div>
                 <div class="flex flex-wrap gap-1.5">
@@ -847,7 +865,7 @@
                 </select>
               </div>
               <div v-if="autoExpandedHistory.length === 0" class="text-center py-6 text-gray-400 text-xs">暂无自动翻译记录</div>
-              <div v-else class="overflow-y-auto min-h-0" :class="isHistoryExpanded ? 'grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] items-start gap-3 flex-1 pr-1 pb-3' : 'space-y-2.5 max-h-[calc(100vh-400px)]'">
+              <div v-else :class="isHistoryExpanded ? 'grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] items-start gap-3 pr-1 pb-3' : 'space-y-2.5'">
                 <div
                   v-for="item in autoExpandedHistory"
                   :key="item.id"
@@ -894,15 +912,15 @@
                   </div>
                 </div>
               </div>
+            </div>
 
-              <!-- Pagination Controls for Auto Translation History -->
-              <div class="flex justify-between items-center mt-3 pt-2 border-t border-gray-100 shrink-0 bg-white">
-                <button @click="changeAutoPage(autoCurrentPage - 1)" :disabled="autoCurrentPage === 1" class="px-2.5 py-1 text-[11px] border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">上一页</button>
-                <div class="flex items-center space-x-1 text-[11px] text-gray-600">
-                  <span>第</span><span class="font-medium">{{ autoCurrentPage }}</span><span>页 / 共</span><span class="font-medium">{{ autoTotalPages }}</span><span>页</span>
-                </div>
-                <button @click="changeAutoPage(autoCurrentPage + 1)" :disabled="autoCurrentPage === autoTotalPages" class="px-2.5 py-1 text-[11px] border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">下一页</button>
+            <!-- Pagination Controls for Auto Translation History - Fixed at bottom -->
+            <div class="flex justify-between items-center px-3 py-2 border-t border-gray-100 shrink-0 bg-white">
+              <button @click="changeAutoPage(autoCurrentPage - 1)" :disabled="autoCurrentPage === 1" class="px-2.5 py-1 text-[11px] border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">上一页</button>
+              <div class="flex items-center space-x-1 text-[11px] text-gray-600">
+                <span>第</span><span class="font-medium">{{ autoCurrentPage }}</span><span>页 / 共</span><span class="font-medium">{{ autoTotalPages }}</span><span>页</span>
               </div>
+              <button @click="changeAutoPage(autoCurrentPage + 1)" :disabled="autoCurrentPage === autoTotalPages" class="px-2.5 py-1 text-[11px] border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">下一页</button>
             </div>
           </div>
         </aside>
@@ -1523,6 +1541,7 @@ const showLoginModal = ref(false)
 const userPoints = ref(0)
 const loginForm = ref({ username: '', password: '' })
 const loginError = ref('')
+const isUserCardExpanded = ref(false)
 
 // Voice modal state
 const showVoiceModal = ref(false)
@@ -1760,7 +1779,7 @@ const autoEditInput = ref(null)
 const autoTaskTags = ref([])
 const autoTagInput = ref('')
 const autoSavedTags = ref([])
-const autoFontSize = ref(80)
+const autoFontSize = ref(70)
 
 try {
   const saved = localStorage.getItem('autoSavedTags')
@@ -1933,14 +1952,43 @@ const selectAutoSubtitleStyle = (styleId) => {
   closeAutoSubtitleStyleModal()
 }
 
-const handleFileSelect = (file) => {
+const handleFileSelect = (file, fileList) => {
   if (file.raw && file.raw.type.startsWith('video/')) {
     // Element Plus的Upload组件会自动管理fileList
+    // 确保文件列表正确更新
+    console.log('文件选择:', file.name)
+    // 创建预览 URL
+    if (fileList.length > 0) {
+      const firstFile = fileList[0]
+      if (firstFile.raw) {
+        currentVideoUrl.value = URL.createObjectURL(firstFile.raw)
+      }
+    }
+  } else {
+    // 如果不是视频文件，从列表中移除
+    const index = fileList.indexOf(file)
+    if (index > -1) {
+      fileList.splice(index, 1)
+    }
+    alert('请选择视频文件')
   }
 }
 
-const handleFileRemove = (file) => {
+const handleFileRemove = (file, fileList) => {
   // Element Plus的Upload组件会自动管理fileList
+  // 清理预览 URL
+  if (fileList.length === 0) {
+    currentVideoUrl.value = ''
+    if (currentVideoUrl.value) {
+      URL.revokeObjectURL(currentVideoUrl.value)
+    }
+  } else {
+    // 如果还有文件，显示第一个文件的预览
+    const firstFile = fileList[0]
+    if (firstFile.raw) {
+      currentVideoUrl.value = URL.createObjectURL(firstFile.raw)
+    }
+  }
 }
 
 const formatFileSize = (bytes) => {
@@ -2606,15 +2654,14 @@ const getAutoStatusClass = (status, task = null) => {
 
 const formatDate = (dateString) => {
   const date = new Date(dateString)
-  // Convert to Beijing time (UTC+8)
-  const beijingTime = new Date(date.getTime() + (8 * 60 * 60 * 1000) + (date.getTimezoneOffset() * 60 * 1000))
+  // 直接加8小时转换为北京时间
+  const beijingTime = new Date(date.getTime() + 8 * 60 * 60 * 1000)
   return beijingTime.toLocaleString('zh-CN', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'Asia/Shanghai'
+    minute: '2-digit'
   })
 }
 
