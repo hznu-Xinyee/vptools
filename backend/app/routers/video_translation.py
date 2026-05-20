@@ -340,6 +340,7 @@ class AutoTranslationSubmitRequest(BaseModel):
     subtitle_params: Optional[SubtitleParams] = None
     tags: Optional[List[str]] = None
     custom_voice_id: Optional[int] = None
+    custom_voice_map: Optional[Dict[str, int]] = None  # Map language code to custom voice ID
     continuous_dubbing: bool = False
 
 
@@ -353,6 +354,7 @@ async def submit_auto_translation_to_fc_background(
     skip_subtitle_erasure: bool,
     subtitle_params: Optional[Dict[str, Any]],
     custom_voice_id: Optional[int] = None,
+    custom_voice_map: Optional[Dict[str, int]] = None,
     continuous_dubbing: bool = False
 ):
     logger.info(f"[自动翻译] 任务 {task_id} 已进入 FC 提交队列，最多同时提交 10 个任务")
@@ -380,8 +382,22 @@ async def submit_auto_translation_to_fc_background(
                 if custom_voice:
                     custom_voice_voice_id = custom_voice.voice_id
                     task.custom_voice_id = custom_voice_id
-            
-            
+
+            # Build custom_voice_voice_id_map from custom_voice_map
+            custom_voice_voice_id_map = None
+            if custom_voice_map:
+                from app.models.custom_voice import CustomVoice
+                custom_voice_voice_id_map = {}
+                for lang_code, voice_id in custom_voice_map.items():
+                    custom_voice = db.query(CustomVoice).filter(
+                        CustomVoice.id == voice_id,
+                        CustomVoice.user_id == task.user_id,
+                        CustomVoice.is_active == True
+                    ).first()
+                    if custom_voice:
+                        custom_voice_voice_id_map[lang_code] = custom_voice.voice_id
+
+
             task.current_stage = "video_translation"
             db.commit()
 
@@ -393,6 +409,7 @@ async def submit_auto_translation_to_fc_background(
                 target_language=target_language,
                 target_languages=target_languages,
                 custom_voice_id=custom_voice_voice_id,
+                custom_voice_id_map=custom_voice_voice_id_map,
                 skip_subtitle_erasure=skip_subtitle_erasure,
                 subtitle_params=subtitle_params,
                 continuous_dubbing=continuous_dubbing
@@ -477,6 +494,7 @@ async def submit_auto_translation(
             request.skip_subtitle_erasure,
             subtitle_params,
             request.custom_voice_id,
+            request.custom_voice_map,
             request.continuous_dubbing
         ))
 

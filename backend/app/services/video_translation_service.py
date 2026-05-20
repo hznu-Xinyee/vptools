@@ -69,6 +69,7 @@ class VideoTranslationService:
         skip_subtitle_erasure: bool = False,
         subtitle_params: Optional[Dict[str, Any]] = None,
         custom_voice_id: Optional[str] = None,
+        custom_voice_id_map: Optional[Dict[str, str]] = None,
         continuous_dubbing: bool = False
     ) -> Dict[str, Any]:
         """Submit auto translation task to docker service"""
@@ -86,6 +87,7 @@ class VideoTranslationService:
             "skip_subtitle_erasure": skip_subtitle_erasure,
             "subtitle_params": subtitle_params,
             "custom_voice_id": custom_voice_id,
+            "custom_voice_id_map": custom_voice_id_map,
             "continuous_dubbing": continuous_dubbing
         }
 
