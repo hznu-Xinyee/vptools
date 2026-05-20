@@ -340,6 +340,7 @@ class AutoTranslationSubmitRequest(BaseModel):
     subtitle_params: Optional[SubtitleParams] = None
     tags: Optional[List[str]] = None
     custom_voice_id: Optional[int] = None
+    continuous_dubbing: bool = False
 
 
 async def submit_auto_translation_to_fc_background(
@@ -351,7 +352,8 @@ async def submit_auto_translation_to_fc_background(
     target_languages: List[str],
     skip_subtitle_erasure: bool,
     subtitle_params: Optional[Dict[str, Any]],
-    custom_voice_id: Optional[int] = None
+    custom_voice_id: Optional[int] = None,
+    continuous_dubbing: bool = False
 ):
     logger.info(f"[自动翻译] 任务 {task_id} 已进入 FC 提交队列，最多同时提交 10 个任务")
     async with fc_submit_semaphore:
@@ -392,7 +394,8 @@ async def submit_auto_translation_to_fc_background(
                 target_languages=target_languages,
                 custom_voice_id=custom_voice_voice_id,
                 skip_subtitle_erasure=skip_subtitle_erasure,
-                subtitle_params=subtitle_params
+                subtitle_params=subtitle_params,
+                continuous_dubbing=continuous_dubbing
             )
             logger.info(f"[自动翻译] 任务 {task_id} 已提交到 FC 服务，响应: {fc_response}")
             
@@ -473,7 +476,8 @@ async def submit_auto_translation(
             target_languages,
             request.skip_subtitle_erasure,
             subtitle_params,
-            request.custom_voice_id
+            request.custom_voice_id,
+            request.continuous_dubbing
         ))
 
         return {

@@ -1,4 +1,7 @@
 from typing import Any, Dict, List, Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class TimelineService:
@@ -122,13 +125,13 @@ class TimelineService:
     ) -> Dict[str, Any]:
         # Default subtitle parameters
         default_subtitle_params = {
-            "Alignment": "TopCenter",
+            "Alignment": "BottomCenter",
             "Font": "Alibaba PuHuiTi",
             "FontSize": 84,
             "FontColor": "#ffffff",
             "Outline": 2,
             "OutlineColour": "#000000",
-            "Y": 0.75
+            "Y": 0.9
         }
 
         # Use provided parameters or defaults
@@ -149,6 +152,69 @@ class TimelineService:
             })
         
         aligned_segments = self.build_aligned_segments(audio_segments)
+
+        # Check if continuous dubbing mode is enabled
+        has_continuous_dubbing = any(seg.get("continuous_dubbing", False) for seg in aligned_segments)
+
+        # Build video track clips
+        video_track_clips = []
+        if has_continuous_dubbing:
+            # Continuous dubbing mode: create separate video clips for each segment with different speeds
+            current_timeline_position = 0.0
+
+            for segment in aligned_segments:
+                video_speed = segment.get("video_speed", 1.0)
+
+                # 从原始视频中取素材的时间范围（使用原始字幕的时间戳）
+                original_start = segment.get("original_start", segment.get("start_time", 0)) / 1000.0  # Convert ms to seconds
+                original_end = segment.get("original_end", segment.get("end_time", 0)) / 1000.0
+
+                # 素材时长
+                source_duration = original_end - original_start
+
+                # 成片中的时长 = 素材时长 / 视频速度
+                timeline_duration = source_duration / video_speed if video_speed > 0 else source_duration
+
+                video_clip = {
+                    "MediaId": media_id,
+                    "In": original_start,  # 从源视频的哪里开始取
+                    "Out": original_end,   # 到源视频的哪里结束
+                    "TimelineIn": current_timeline_position,  # 在成片中的开始位置
+                    "TimelineOut": current_timeline_position + timeline_duration,  # 在成片中的结束位置
+                    "Speed": round(video_speed, 4),
+                    "ScaleMode": "Cover",
+                    "Effects": [
+                        {
+                            "Type": "Volume",
+                            "Gain": 0
+                        }
+                    ]
+                }
+                video_track_clips.append(video_clip)
+
+                # 更新下一个片段的时间线位置
+                current_timeline_position += timeline_duration
+
+                logger.info(
+                    f"[Timeline] 连续口播视频片段[{segment.get('index')}]: "
+                    f"源素材 {original_start:.2f}s-{original_end:.2f}s ({source_duration:.2f}s), "
+                    f"速度 {video_speed:.2f}x, "
+                    f"成片位置 {video_clip['TimelineIn']:.2f}s-{video_clip['TimelineOut']:.2f}s ({timeline_duration:.2f}s)"
+                )
+        else:
+            # Normal mode: single video clip covering the entire timeline
+            video_track_clips = [
+                {
+                    "MediaId": media_id,
+                    "ScaleMode": "Cover",
+                    "Effects": [
+                        {
+                            "Type": "Volume",
+                            "Gain": 0
+                        }
+                    ]
+                }
+            ]
 
         # Calculate subtitle timeline based on TTS audio durations
         subtitle_clips = []
@@ -191,17 +257,7 @@ class TimelineService:
             "VideoTracks": [
                 {
                     "MainTrack": True,
-                    "VideoTrackClips": [
-                        {
-                            "MediaId": media_id,
-                            "Effects": [
-                                {
-                                    "Type": "Volume",
-                                    "Gain": 0
-                                }
-                            ]
-                        }
-                    ]
+                    "VideoTrackClips": video_track_clips
                 }
             ],
             "AudioTracks": audio_tracks,

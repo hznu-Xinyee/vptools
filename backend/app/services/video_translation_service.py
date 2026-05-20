@@ -68,7 +68,8 @@ class VideoTranslationService:
         target_languages: Optional[List[str]] = None,
         skip_subtitle_erasure: bool = False,
         subtitle_params: Optional[Dict[str, Any]] = None,
-        custom_voice_id: Optional[str] = None
+        custom_voice_id: Optional[str] = None,
+        continuous_dubbing: bool = False
     ) -> Dict[str, Any]:
         """Submit auto translation task to docker service"""
         if not self.service_url:
@@ -84,7 +85,8 @@ class VideoTranslationService:
             "target_languages": target_languages,
             "skip_subtitle_erasure": skip_subtitle_erasure,
             "subtitle_params": subtitle_params,
-            "custom_voice_id": custom_voice_id
+            "custom_voice_id": custom_voice_id,
+            "continuous_dubbing": continuous_dubbing
         }
 
         logger.info(

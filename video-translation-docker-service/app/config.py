@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     GEMINI_BASE_URL: str = "https://api.kie.ai"
     GEMINI_MODEL: str = "gemini-2.5-flash"
 
+    # Doubao (ARK) Configuration for translation fallback
+    ARK_API_KEY: Optional[str] = None
+    ARK_BASE_URL: str = "https://ark.cn-beijing.volces.com/api/v3"
+    ARK_MODEL: str = "doubao-seed-2-0-lite-260215"
+
     ALIYUN_NLS_URL: str = "wss://nls-gateway-cn-shanghai.aliyuncs.com/ws/v1"
     ALIYUN_NLS_APPKEY: Optional[str] = None
     ALIYUN_NLS_TOKEN: Optional[str] = None

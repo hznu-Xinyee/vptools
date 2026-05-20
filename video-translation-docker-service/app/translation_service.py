@@ -111,6 +111,26 @@ class TranslationService:
             response.raise_for_status()
             return response.json()
 
+    async def _call_doubao_chat(self, request_body: dict) -> dict:
+        """Call Doubao (ARK) API for translation"""
+        payload = {
+            "model": settings.ARK_MODEL,
+            "messages": request_body["messages"],
+            "stream": False
+        }
+        # Increase timeout for large translation requests
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            response = await client.post(
+                f"{settings.ARK_BASE_URL.rstrip('/')}/chat/completions",
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {settings.ARK_API_KEY}"
+                },
+                json=payload
+            )
+            response.raise_for_status()
+            return response.json()
+
     def _extract_gemini_content(self, data: dict) -> str:
         if "choices" in data:
             return data["choices"][0]["message"]["content"].strip()
@@ -143,11 +163,12 @@ class TranslationService:
 
         last_error = None
         endpoints = [
-            ("gemini-2.5-flash", "/gemini-2.5-flash/v1/chat/completions", settings.GEMINI_MODEL, max_retries),
-            ("gemini-3.1-pro", "/gemini-3.1-pro/v1/chat/completions", "gemini-3.1-pro", max_retries)
+            ("doubao", None, settings.ARK_MODEL, max_retries, "doubao"),
+            ("gemini-2.5-flash", "/gemini-2.5-flash/v1/chat/completions", settings.GEMINI_MODEL, max_retries, "gemini"),
+            ("gemini-3.1-pro", "/gemini-3.1-pro/v1/chat/completions", "gemini-3.1-pro", max_retries, "gemini")
         ]
 
-        for endpoint_name, endpoint, model, endpoint_retries in endpoints:
+        for endpoint_name, endpoint, model, endpoint_retries, api_type in endpoints:
             for attempt in range(endpoint_retries):
                 try:
                     request_body = {
@@ -188,8 +209,18 @@ class TranslationService:
                     request_filename = f"request_timestamped_{timestamp}_{endpoint_name}_attempt{attempt+1}.txt"
                     self._save_to_file(json.dumps(request_body, indent=2, ensure_ascii=False), request_filename)
 
-                    data = await self._call_gemini_chat(request_body, endpoint, model)
-                    logger.info(f"Gemini API timestamped response from {endpoint_name}: {data}")
+                    # Call different API based on type
+                    if api_type == "gemini":
+                        data = await self._call_gemini_chat(request_body, endpoint, model)
+                    elif api_type == "doubao":
+                        if not settings.ARK_API_KEY:
+                            logger.warning("ARK_API_KEY not configured, skipping Doubao fallback")
+                            continue
+                        data = await self._call_doubao_chat(request_body)
+                    else:
+                        raise ValueError(f"Unknown API type: {api_type}")
+
+                    logger.info(f"Translation API timestamped response from {endpoint_name}: {data}")
 
                     response_filename = f"response_timestamped_{timestamp}_{endpoint_name}_attempt{attempt+1}.txt"
                     self._save_to_file(json.dumps(data, indent=2, ensure_ascii=False), response_filename)

@@ -5,7 +5,7 @@ pydantic-settings==2.7.1
 httpx==0.28.1
 oss2==2.19.1
 python-dotenv==1.0.1
-websockets==16.0
+websockets==15.0.1
 aliyun-python-sdk-core==2.15.1
 alibabacloud_ice20201109==2.3.0
 alibabacloud_tea_openapi==0.3.12

@@ -518,23 +518,59 @@
                 />
               </label>
 
+              <label class="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2">
+                <div>
+                  <div class="text-xs font-medium text-gray-800">口播连续版</div>
+                  <div class="text-[10px] text-gray-400">TTS音频首尾相连，通过调整视频速度实现对齐</div>
+                </div>
+                <input
+                  v-model="autoContinuousDubbing"
+                  type="checkbox"
+                  :disabled="autoIsProcessing"
+                  class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+              </label>
+
               <div class="pt-1">
                 <div class="flex items-center justify-between mb-2">
                   <label class="block text-[11px] text-gray-500">目标语言</label>
                   <span class="text-[11px] text-indigo-600">已选 {{ autoTargetLanguages.length }} 门</span>
                 </div>
                 <div class="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
-                  <button
+                  <div
                     v-for="language in LANGUAGE_OPTIONS"
                     :key="language.code"
-                    type="button"
-                    @click="toggleAutoTargetLanguage(language.code)"
-                    class="px-2.5 py-2 rounded-lg border text-left text-xs transition"
-                    :class="autoTargetLanguages.includes(language.code) ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm' : 'border-gray-200 bg-white text-gray-700 hover:border-indigo-300'"
+                    class="relative"
                   >
-                    <span class="font-medium">{{ language.name }}</span>
-                    <span class="block text-[10px] opacity-70">{{ language.voice }} · {{ language.gender }}</span>
-                  </button>
+                    <button
+                      type="button"
+                      @click="toggleAutoTargetLanguage(language.code)"
+                      class="w-full px-2.5 py-2 rounded-lg border text-left text-xs transition"
+                      :class="autoTargetLanguages.includes(language.code) ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm' : 'border-gray-200 bg-white text-gray-700 hover:border-indigo-300'"
+                    >
+                      <span class="font-medium">{{ language.name }}</span>
+                      <span class="block text-[10px] opacity-70">
+                        {{ customVoiceMap[language.code] ? customVoiceMap[language.code].name : language.voice }} ·
+                        {{ customVoiceMap[language.code] ? (customVoiceMap[language.code].gender === 'male' ? '男声' : customVoiceMap[language.code].gender === 'female' ? '女声' : '其他') : language.gender }}
+                        <span v-if="customVoiceMap[language.code]" class="text-indigo-600">（自定义）</span>
+                      </span>
+                    </button>
+                    <!-- 试听按钮 -->
+                    <button
+                      type="button"
+                      @click.stop="playHelloVoice(language.code)"
+                      class="absolute top-1 right-1 w-6 h-6 flex items-center justify-center rounded-full bg-white border border-gray-300 hover:bg-indigo-50 hover:border-indigo-400 transition shadow-sm"
+                      :class="currentPlayingLanguage === language.code ? 'bg-indigo-100 border-indigo-500' : ''"
+                      title="试听"
+                    >
+                      <svg v-if="currentPlayingLanguage === language.code" class="w-3 h-3 text-indigo-600" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+                      </svg>
+                      <svg v-else class="w-3 h-3 text-gray-600" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z"/>
+                      </svg>
+                    </button>
+                  </div>
                   <button
                     type="button"
                     @click="openVoiceModal"
@@ -632,8 +668,48 @@
                   type="number"
                   v-model.number="autoFontSize"
                   :disabled="autoIsProcessing"
+                  @input="updateSubtitlePreview"
                   class="w-full px-2 py-1.5 border border-gray-300 rounded-md bg-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-600 disabled:opacity-50"
                 />
+                <div v-if="autoPreviewVideoRef && autoPreviewVideoRef.videoHeight" class="text-[10px] text-gray-400 mt-1">
+                  视频分辨率: {{ autoPreviewVideoRef.videoWidth }}x{{ autoPreviewVideoRef.videoHeight }}
+                  <br>预览字体: {{ subtitlePreviewFontSize }}px
+                </div>
+              </div>
+
+              <div class="pt-1">
+                <div class="flex items-center justify-between mb-1">
+                  <label class="block text-[11px] text-gray-500">字幕位置（距底部）</label>
+                  <span class="text-[11px] text-indigo-600">{{ subtitleBottomPosition }}%</span>
+                </div>
+                <input
+                  type="range"
+                  v-model.number="subtitleBottomPosition"
+                  min="0"
+                  max="40"
+                  step="1"
+                  :disabled="autoIsProcessing"
+                  class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 disabled:opacity-50"
+                />
+                <div class="flex justify-between text-[10px] text-gray-400 mt-1">
+                  <span>底部</span>
+                  <span>中间</span>
+                </div>
+              </div>
+
+              <div class="pt-1">
+                <label class="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2">
+                  <div>
+                    <div class="text-xs font-medium text-gray-800">显示字幕预览</div>
+                    <div class="text-[10px] text-gray-400">在视频上预览字幕效果</div>
+                  </div>
+                  <input
+                    v-model="showSubtitlePreview"
+                    type="checkbox"
+                    :disabled="autoIsProcessing || !autoVideoObjectUrl"
+                    class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                </label>
               </div>
 
               <button @click="startAutoTranslation" :disabled="autoIsProcessing || autoUploadedVideos.length === 0 || autoTargetLanguages.length === 0" :title="autoUploadedVideos.length === 0 ? '请先确认上传视频' : autoTargetLanguages.length === 0 ? '请至少选择一种目标语言' : ''" class="w-full py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed">
@@ -677,10 +753,87 @@
                       </div>
                     </div>
                   </div>
+
+                  <!-- 配置信息显示 -->
+                  <div v-if="autoSelectedHistoryTask.result_video_url" class="mt-3 bg-gray-50 rounded-lg p-3 border border-gray-200">
+                    <div class="text-xs font-medium text-gray-700 mb-2">翻译配置</div>
+                    <div class="space-y-1.5 text-[11px]">
+                      <div class="flex justify-between">
+                        <span class="text-gray-500">音色：</span>
+                        <span class="text-gray-900 font-medium">{{ getVoiceName(autoSelectedHistoryTask.target_language, autoSelectedHistoryTask.custom_voice_id) }}</span>
+                      </div>
+                      <div v-if="autoSelectedHistoryTask.tags && autoSelectedHistoryTask.tags.length > 0" class="flex justify-between">
+                        <span class="text-gray-500">任务标签：</span>
+                        <div class="flex flex-wrap gap-1 justify-end">
+                          <span v-for="tag in autoSelectedHistoryTask.tags" :key="tag" class="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700">{{ tag }}</span>
+                        </div>
+                      </div>
+                      <div v-if="autoSelectedHistoryTask.subtitle_params" class="flex justify-between">
+                        <span class="text-gray-500">字体大小：</span>
+                        <span class="text-gray-900 font-medium">{{ autoSelectedHistoryTask.subtitle_params.font_size || 70 }}</span>
+                      </div>
+                      <div v-if="autoSelectedHistoryTask.subtitle_params" class="flex justify-between">
+                        <span class="text-gray-500">字幕位置：</span>
+                        <span class="text-gray-900 font-medium">{{ getAlignmentName(autoSelectedHistoryTask.subtitle_params.alignment) }}</span>
+                      </div>
+                      <div v-if="autoSelectedHistoryTask.subtitle_params && autoSelectedHistoryTask.subtitle_params.y" class="flex justify-between">
+                        <span class="text-gray-500">垂直位置：</span>
+                        <span class="text-gray-900 font-medium">{{ Math.round(autoSelectedHistoryTask.subtitle_params.y * 100) }}%</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <!-- Single video for uploaded video preview -->
-              <video v-else-if="autoVideoObjectUrl" :src="autoVideoObjectUrl" controls class="max-w-[80%] max-h-[70vh] rounded-lg shadow"></video>
+              <!-- Single video for uploaded video preview with subtitle overlay -->
+              <div v-else-if="autoVideoObjectUrl" class="inline-block">
+                <!-- 9:16 固定比例容器 -->
+                <div class="relative bg-black rounded-lg shadow overflow-hidden" style="width: 360px; aspect-ratio: 9/16;">
+                  <!-- 视频层 -->
+                  <video
+                    ref="autoPreviewVideoRef"
+                    :src="autoVideoObjectUrl"
+                    controls
+                    class="absolute inset-0 w-full h-full object-contain"
+                    @loadedmetadata="onVideoLoaded"
+                  ></video>
+
+                  <!-- 字幕预view层 -->
+                  <div
+                    v-if="showSubtitlePreview"
+                    class="absolute left-0 right-0 pointer-events-none text-center"
+                    :style="{
+                      top: `${100 - subtitleBottomPosition}%`,
+                      fontSize: `${subtitlePreviewFontSize}px`
+                    }"
+                  >
+                    <div
+                      class="inline-block px-4 py-2 font-bold"
+                      :style="getSubtitlePreviewStyle()"
+                    >
+                      示例字幕文本
+                    </div>
+                  </div>
+
+                  <!-- 拖拽控制层 -->
+                  <div
+                    v-if="showSubtitlePreview"
+                    class="absolute left-0 right-0 cursor-ns-resize flex items-center justify-center"
+                    :style="{
+                      top: `${100 - subtitleBottomPosition}%`,
+                      height: '60px',
+                      transform: 'translateY(-50%)'
+                    }"
+                    @mousedown="startDragSubtitle"
+                  >
+                    <div class="bg-indigo-500 bg-opacity-80 text-white px-3 py-1 rounded-full text-xs flex items-center gap-2 shadow-lg">
+                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                      </svg>
+                      <span>拖动调整位置</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <!-- Single video for history (translated only) when not selected -->
               <video v-else-if="currentVideoUrl" :src="currentVideoUrl" controls autoplay class="max-w-[80%] max-h-[70vh] rounded-lg shadow"></video>
               <div v-else class="text-gray-400 text-sm">暂无视频</div>
@@ -1210,11 +1363,11 @@
     </div>
 
     <!-- Voice List Modal -->
-    <div v-if="showVoiceModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @click="showVoiceModal = false">
+    <div v-if="showVoiceModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @click="closeVoiceModal">
       <div class="bg-white rounded-lg shadow-xl w-[1200px] h-[600px] mx-4 overflow-hidden flex flex-col" @click.stop>
         <div class="p-4 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
           <h2 class="text-lg font-semibold text-gray-900">音色列表</h2>
-          <button @click="showVoiceModal = false" class="text-gray-400 hover:text-gray-600">
+          <button @click="closeVoiceModal" class="text-gray-400 hover:text-gray-600">
             <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -1248,20 +1401,40 @@
             <div
               v-for="voice in filteredVoices"
               :key="voice.id"
-              @click="selectVoice(voice)"
-              class="p-3 rounded-lg border cursor-pointer transition flex flex-col"
+              class="p-3 rounded-lg border transition flex flex-col relative"
               :class="selectedVoice?.id === voice.id ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:border-indigo-300'"
             >
-              <div class="flex justify-between items-start flex-shrink-0">
-                <div class="font-medium text-gray-900 text-sm truncate flex-1">{{ voice.name }}</div>
-                <div v-if="selectedVoice?.id === voice.id" class="text-indigo-600 flex-shrink-0 ml-2">
-                  <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                  </svg>
+              <div @click="selectVoice(voice)" class="cursor-pointer flex-1">
+                <div class="flex justify-between items-start flex-shrink-0">
+                  <div class="font-medium text-gray-900 text-sm truncate flex-1">{{ voice.name }}</div>
+                  <div v-if="selectedVoice?.id === voice.id" class="text-indigo-600 flex-shrink-0 ml-2">
+                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                    </svg>
+                  </div>
                 </div>
+                <div class="text-xs text-gray-500 mt-1">{{ getLanguageName(voice.language) }} · {{ voice.gender === 'male' ? '男声' : voice.gender === 'female' ? '女声' : '其他' }}</div>
+                <div v-if="voice.description" class="text-xs text-gray-400 mt-1 line-clamp-2">{{ voice.description }}</div>
               </div>
-              <div class="text-xs text-gray-500 mt-1">{{ getLanguageName(voice.language) }} · {{ voice.gender === 'male' ? '男声' : voice.gender === 'female' ? '女声' : '其他' }}</div>
-              <div v-if="voice.description" class="text-xs text-gray-400 mt-1 line-clamp-2">{{ voice.description }}</div>
+              <!-- Play button -->
+              <button
+                @click.stop="playVoicePreview(voice)"
+                :disabled="isGeneratingPreview && playingVoiceId === voice.id"
+                class="mt-2 w-full px-2 py-1 text-xs rounded border transition flex items-center justify-center gap-1"
+                :class="playingVoiceId === voice.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
+              >
+                <svg v-if="isGeneratingPreview && playingVoiceId === voice.id" class="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <svg v-else-if="playingVoiceId === voice.id" class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                </svg>
+                <svg v-else class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+                </svg>
+                <span>{{ isGeneratingPreview && playingVoiceId === voice.id ? '生成中' : playingVoiceId === voice.id ? '停止' : '试听' }}</span>
+              </button>
             </div>
           </div>
         </div>
@@ -1276,7 +1449,7 @@
           <div class="flex gap-2">
             <button
               type="button"
-              @click="showVoiceModal = false"
+              @click="closeVoiceModal"
               class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-50 transition"
             >
               取消
@@ -1356,7 +1529,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import OSS from 'ali-oss'
@@ -1385,13 +1558,13 @@ const LANGUAGE_OPTIONS = [
 ]
 
 const DEFAULT_AUTO_SUBTITLE_PARAMS = {
-  alignment: 'TopCenter',
+  alignment: 'BottomCenter',
   font: 'Alibaba PuHuiTi',
   font_size: 84,
   font_color: '#ffffff',
   outline: 2,
   outline_colour: '#000000',
-  y: 0.75
+  y: 0.9
 }
 
 const SUBTITLE_STYLE_PLACEHOLDER_IMAGE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
@@ -1554,6 +1727,9 @@ const voiceFilterGender = ref('')
 const newVoice = ref({ name: '', voice_id: '', language: 'zh', gender: 'female', description: '' })
 const isAddingVoice = ref(false)
 const isLoggingIn = ref(false)
+const voicePreviewAudio = ref(null)
+const playingVoiceId = ref(null)
+const isGeneratingPreview = ref(false)
 
 // History expand state
 const isHistoryExpanded = ref(false)
@@ -1604,6 +1780,16 @@ const openVoiceModal = async () => {
   filterVoices()
 }
 
+const closeVoiceModal = () => {
+  // 停止音频播放
+  if (voicePreviewAudio.value) {
+    voicePreviewAudio.value.pause()
+    voicePreviewAudio.value = null
+  }
+  playingVoiceId.value = null
+  showVoiceModal.value = false
+}
+
 const openAddVoiceModal = () => {
   showAddVoiceModal.value = true
   newVoice.value = { name: '', voice_id: '', language: 'zh', gender: 'female', description: '' }
@@ -1634,23 +1820,98 @@ const selectVoice = (voice) => {
   selectedVoice.value = voice
 }
 
+const playVoicePreview = async (voice) => {
+  try {
+    // 如果正在播放同一个音色，则停止播放
+    if (playingVoiceId.value === voice.id && voicePreviewAudio.value) {
+      voicePreviewAudio.value.pause()
+      voicePreviewAudio.value = null
+      playingVoiceId.value = null
+      return
+    }
+
+    // 停止之前的播放
+    if (voicePreviewAudio.value) {
+      voicePreviewAudio.value.pause()
+      voicePreviewAudio.value = null
+    }
+
+    playingVoiceId.value = voice.id
+    isGeneratingPreview.value = true
+
+    // 检查音频文件是否已存在
+    const audioUrl = `${API_BASE}/hello-voices/${voice.voice_id}.mp3`
+
+    try {
+      // 尝试直接播放已存在的文件
+      const audio = new Audio(audioUrl)
+      audio.onended = () => {
+        playingVoiceId.value = null
+        voicePreviewAudio.value = null
+      }
+      audio.onerror = async () => {
+        // 文件不存在，生成新的预览音频
+        console.log('Audio file not found, generating preview...')
+        await generateAndPlayPreview(voice)
+      }
+      await audio.play()
+      voicePreviewAudio.value = audio
+      isGeneratingPreview.value = false
+    } catch (error) {
+      // 播放失败，尝试生成新的预览音频
+      await generateAndPlayPreview(voice)
+    }
+  } catch (error) {
+    console.error('Failed to play voice preview:', error)
+    ElMessage.error('播放试听失败')
+    playingVoiceId.value = null
+    isGeneratingPreview.value = false
+  }
+}
+
+const generateAndPlayPreview = async (voice) => {
+  try {
+    // 调用后端生成预览音频
+    const response = await axios.post(`${API_BASE}/generate-voice-preview`, {
+      voice_id: voice.voice_id,
+      language: voice.language
+    })
+
+    if (response.data.status === 'success') {
+      const audioUrl = `${API_BASE}${response.data.audio_url}`
+      const audio = new Audio(audioUrl)
+      audio.onended = () => {
+        playingVoiceId.value = null
+        voicePreviewAudio.value = null
+      }
+      await audio.play()
+      voicePreviewAudio.value = audio
+    }
+  } finally {
+    isGeneratingPreview.value = false
+  }
+}
+
 const confirmVoiceSelection = () => {
   if (selectedVoice.value) {
-    // Add the custom voice to the language selection
-    const customLang = {
-      code: selectedVoice.value.language,
+    const languageCode = selectedVoice.value.language
+
+    // Save custom voice info to the map
+    customVoiceMap.value[languageCode] = {
+      id: selectedVoice.value.id,
       name: selectedVoice.value.name,
-      voice: selectedVoice.value.voice_id,
-      gender: selectedVoice.value.gender === 'male' ? '男声' : selectedVoice.value.gender === 'female' ? '女声' : '其他',
-      isCustom: true,
-      customVoiceId: selectedVoice.value.id
+      voice_id: selectedVoice.value.voice_id,
+      gender: selectedVoice.value.gender,
+      isCustom: true
     }
-    // Replace the default language with custom voice
-    const existingIndex = autoTargetLanguages.value.findIndex(lang => lang === selectedVoice.value.language)
+
+    // Add language to selection if not already selected
+    const existingIndex = autoTargetLanguages.value.findIndex(lang => lang === languageCode)
     if (existingIndex === -1) {
-      autoTargetLanguages.value.push(selectedVoice.value.language)
+      autoTargetLanguages.value.push(languageCode)
     }
-    showVoiceModal.value = false
+
+    closeVoiceModal()
   }
 }
 
@@ -1757,7 +2018,9 @@ const autoUploadedVideos = ref([])
 const autoUploadProgress = ref(0)
 const autoIsUploading = ref(false)
 const autoTargetLanguages = ref(['en'])
+const customVoiceMap = ref({}) // Map language code to custom voice info
 const autoSkipSubtitleErasure = ref(false)
+const autoContinuousDubbing = ref(false)
 const autoSubtitleStyleId = ref('default')
 const selectedAutoSubtitleStyle = computed(() => AUTO_SUBTITLE_STYLE_OPTIONS.find(style => style.id === autoSubtitleStyleId.value) || AUTO_SUBTITLE_STYLE_OPTIONS[0])
 const autoTranslationPointCost = computed(() => (10 + Math.max(0, autoTargetLanguages.value.length - 1) * 5) * Math.max(1, autoUploadedVideos.value.length))
@@ -1779,7 +2042,37 @@ const autoEditInput = ref(null)
 const autoTaskTags = ref([])
 const autoTagInput = ref('')
 const autoSavedTags = ref([])
-const autoFontSize = ref(70)
+const autoFontSize = ref(90)
+const subtitleBottomPosition = ref(30)
+const showSubtitlePreview = ref(false)
+const videoMetadataLoaded = ref(0) // Counter to force computed recalculation
+const subtitlePreviewFontSize = computed(() => {
+  // Scale font size based on actual video resolution
+  // FontSize in ICE is absolute pixels, so we need to scale preview based on actual video height
+
+  if (!autoPreviewVideoRef.value) {
+    return autoFontSize.value
+  }
+
+  const videoElement = autoPreviewVideoRef.value
+  const containerHeight = videoElement.clientHeight
+  const actualVideoHeight = videoElement.videoHeight
+
+  if (!containerHeight || containerHeight === 0 || !actualVideoHeight || actualVideoHeight === 0) {
+    return autoFontSize.value
+  }
+
+  // Scale based on actual video resolution
+  // If video is 1080p and container shows 540px, scale = 0.5
+  // If autoFontSize = 50, preview shows 25px
+  const scale = containerHeight / actualVideoHeight
+
+  return Math.round(autoFontSize.value * scale)
+})
+const autoPreviewVideoRef = ref(null)
+const isDraggingSubtitle = ref(false)
+const dragStartY = ref(0)
+const dragStartPosition = ref(0)
 
 try {
   const saved = localStorage.getItem('autoSavedTags')
@@ -1792,6 +2085,99 @@ try {
 }
 
 const API_BASE = '/api'
+
+// Subtitle preview functions
+const getSubtitlePreviewStyle = () => {
+  const style = selectedAutoSubtitleStyle.value
+  if (!style || !style.params) {
+    return {
+      color: '#ffffff',
+      textShadow: '2px 2px 4px rgba(0,0,0,0.8), -1px -1px 2px rgba(0,0,0,0.8), 1px -1px 2px rgba(0,0,0,0.8), -1px 1px 2px rgba(0,0,0,0.8)'
+    }
+  }
+
+  const params = style.params
+  const outlineColor = params.outline_colour || '#000000'
+  const backColor = params.back_colour || 'transparent'
+  const fontColor = params.font_color || '#ffffff'
+  const outline = params.outline || 2
+
+  // Create text shadow for outline effect
+  const shadows = []
+  for (let i = -outline; i <= outline; i++) {
+    for (let j = -outline; j <= outline; j++) {
+      if (i !== 0 || j !== 0) {
+        shadows.push(`${i}px ${j}px 0 ${outlineColor}`)
+      }
+    }
+  }
+
+  return {
+    color: fontColor,
+    textShadow: shadows.join(', '),
+    backgroundColor: backColor !== 'transparent' ? backColor : undefined,
+    padding: backColor !== 'transparent' ? '4px 8px' : undefined,
+    borderRadius: backColor !== 'transparent' ? '4px' : undefined,
+    fontFamily: params.font || 'Alibaba PuHuiTi, SimSun, sans-serif'
+  }
+}
+
+const updateSubtitlePreview = () => {
+  // Force re-render of subtitle preview
+  if (showSubtitlePreview.value) {
+    showSubtitlePreview.value = false
+    nextTick(() => {
+      showSubtitlePreview.value = true
+    })
+  }
+}
+
+const onVideoLoaded = () => {
+  // Video loaded, can now show subtitle preview
+  if (autoVideoObjectUrl.value) {
+    // Increment counter to trigger subtitlePreviewFontSize recalculation
+    videoMetadataLoaded.value++
+    // Use nextTick to ensure video dimensions are available
+    nextTick(() => {
+      showSubtitlePreview.value = true
+    })
+  }
+}
+
+const startDragSubtitle = (e) => {
+  isDraggingSubtitle.value = true
+  dragStartY.value = e.clientY
+  dragStartPosition.value = subtitleBottomPosition.value
+
+  document.addEventListener('mousemove', onDragSubtitle)
+  document.addEventListener('mouseup', stopDragSubtitle)
+  e.preventDefault()
+}
+
+const onDragSubtitle = (e) => {
+  if (!isDraggingSubtitle.value || !autoPreviewVideoRef.value) return
+
+  const videoElement = autoPreviewVideoRef.value
+  const videoRect = videoElement.getBoundingClientRect()
+  const videoHeight = videoRect.height
+
+  // Calculate position change
+  // Dragging up (negative deltaY) should decrease subtitleBottomPosition (move subtitle up, closer to top)
+  // Dragging down (positive deltaY) should increase subtitleBottomPosition (move subtitle down, closer to bottom)
+  const deltaY = dragStartY.value - e.clientY  // Positive when dragging up
+  const deltaPercent = (deltaY / videoHeight) * 100
+
+  // Update position (clamp between 0 and 40%)
+  let newPosition = dragStartPosition.value + deltaPercent
+  newPosition = Math.max(0, Math.min(40, newPosition))
+  subtitleBottomPosition.value = Math.round(newPosition)
+}
+
+const stopDragSubtitle = () => {
+  isDraggingSubtitle.value = false
+  document.removeEventListener('mousemove', onDragSubtitle)
+  document.removeEventListener('mouseup', stopDragSubtitle)
+}
 
 // Generate video thumbnail
 const generateVideoThumbnail = (file) => {
@@ -1906,6 +2292,30 @@ const getLanguageName = (langCode) => {
   return LANGUAGE_OPTIONS.find(language => language.code === langCode)?.name || langCode
 }
 
+const getVoiceName = (langCode, customVoiceId) => {
+  if (customVoiceId) {
+    return customVoiceId
+  }
+  const language = LANGUAGE_OPTIONS.find(language => language.code === langCode)
+  if (language) {
+    return `${language.voice}（${language.gender}）`
+  }
+  return '默认音色'
+}
+
+const getAlignmentName = (alignment) => {
+  const alignmentMap = {
+    'BottomCenter': '底部居中',
+    'BottomLeft': '底部左侧',
+    'BottomRight': '底部右侧',
+    'TopCenter': '顶部居中',
+    'TopLeft': '顶部左侧',
+    'TopRight': '顶部右侧',
+    'Center': '居中'
+  }
+  return alignmentMap[alignment] || alignment || '底部居中'
+}
+
 const getTaskTargetLanguages = (task) => {
   if (Array.isArray(task.target_languages) && task.target_languages.length > 0) {
     return task.target_languages
@@ -1933,10 +2343,56 @@ const toggleAutoTargetLanguage = (languageCode) => {
   }
 }
 
+// 语音试听功能
+let currentAudio = null
+
+const playHelloVoice = (languageCode) => {
+  // 如果正在播放同一个语言，停止播放
+  if (currentPlayingLanguage.value === languageCode && currentAudio) {
+    currentAudio.pause()
+    currentAudio = null
+    currentPlayingLanguage.value = null
+    return
+  }
+
+  // 停止之前的播放
+  if (currentAudio) {
+    currentAudio.pause()
+    currentAudio = null
+  }
+
+  // 播放新的音频
+  const audioPath = `/hello_voices/hello_${languageCode}.mp3`
+  currentAudio = new Audio(audioPath)
+  currentPlayingLanguage.value = languageCode
+
+  currentAudio.play().catch(err => {
+    console.error('播放失败:', err)
+    currentPlayingLanguage.value = null
+  })
+
+  // 播放结束后重置状态
+  currentAudio.onended = () => {
+    currentPlayingLanguage.value = null
+    currentAudio = null
+  }
+
+  // 播放出错时重置状态
+  currentAudio.onerror = () => {
+    currentPlayingLanguage.value = null
+    currentAudio = null
+  }
+}
+
 const buildAutoSubtitleParams = () => ({
   ...DEFAULT_AUTO_SUBTITLE_PARAMS,
   ...selectedAutoSubtitleStyle.value.params,
-  font_size: autoFontSize.value
+  font_size: autoFontSize.value,
+  alignment: 'TopCenter',
+  // When alignment is TopCenter, Y represents the distance from video top to subtitle TOP edge
+  // subtitleBottomPosition is distance from video bottom (e.g., 10% from bottom)
+  // Convert to distance from top: if 10% from bottom, then top edge is at (100 - 10)% = 90% from top
+  y: (100 - subtitleBottomPosition.value) / 100
 })
 
 const openAutoSubtitleStyleModal = () => {
@@ -2682,6 +3138,9 @@ const handleAutoVideoSelect = async (e) => {
     autoSelectedHistoryTask.value = null
     currentPlayingTask.value = null
     currentPlayingLanguage.value = null
+    // Reset subtitle preview to hide it until video metadata loads
+    showSubtitlePreview.value = false
+    videoMetadataLoaded.value = 0
     e.target.value = ''
   }
 }
@@ -2826,6 +3285,14 @@ const startAutoTranslation = async () => {
     for (const uploadedVideo of autoUploadedVideos.value) {
       const fileUrl = ossClient.signatureUrl(uploadedVideo.ossKey, { expires: 604800 })
 
+      // Build custom voice map for each language
+      const languageVoiceMap = {}
+      for (const langCode of autoTargetLanguages.value) {
+        if (customVoiceMap.value[langCode]) {
+          languageVoiceMap[langCode] = customVoiceMap.value[langCode].id
+        }
+      }
+
       // Submit auto translation task (will be processed in background)
       await axios.post(
         `${API_BASE}/video-translation/submit-auto`,
@@ -2837,9 +3304,10 @@ const startAutoTranslation = async () => {
           file_url: fileUrl,
           original_video_url: fileUrl,
           skip_subtitle_erasure: autoSkipSubtitleErasure.value,
+          continuous_dubbing: autoContinuousDubbing.value,
           subtitle_params: buildAutoSubtitleParams(),
           tags: autoTaskTags.value,
-          custom_voice_id: selectedVoice.value ? selectedVoice.value.id : null
+          custom_voice_map: languageVoiceMap
         },
         {
           headers: {
@@ -2861,7 +3329,9 @@ const startAutoTranslation = async () => {
     autoProgress.value = { step: 0, status: '' }
     autoUploadProgress.value = 0
     autoTargetLanguages.value = ['en']
+    customVoiceMap.value = {}
     autoSkipSubtitleErasure.value = false
+    autoContinuousDubbing.value = false
     autoSubtitleStyleId.value = 'default'
     autoTaskTags.value = []
     
