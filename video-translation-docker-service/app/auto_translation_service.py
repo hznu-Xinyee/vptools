@@ -74,77 +74,144 @@ class AutoTranslationService:
             video_data = video_response.content
             logger.info(f"[自动翻译] 视频下载完成，大小: {len(video_data)} 字节")
 
-            voice_audio_url = None
-            original_audio_url = None
-            background_audio_url = None
-            logger.info(f"[自动翻译] 步骤 1.1/3: 开始音频分离（声伴分离）")
-            temp_video_path = None
-            temp_audio_path = None
-            try:
-                with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_video:
-                    temp_video.write(video_data)
-                    temp_video_path = temp_video.name
+            # 并行执行音频分离和字幕擦除
+            logger.info(f"[自动翻译] 步骤 1/3: 并行执行音频分离和字幕擦除")
 
-                logger.info(f"[自动翻译] 视频已保存到临时文件: {temp_video_path}")
+            async def audio_separation_task():
+                """音频分离任务"""
+                voice_audio_url = None
+                original_audio_url = None
+                background_audio_url = None
+                logger.info(f"[自动翻译] 步骤 1.1/3: 开始音频分离（声伴分离）")
+                temp_video_path = None
+                temp_audio_path = None
+                try:
+                    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_video:
+                        temp_video.write(video_data)
+                        temp_video_path = temp_video.name
 
-                temp_audio_path = temp_video_path.replace(".mp4", ".wav")
-                logger.info(f"[自动翻译] 使用ffmpeg提取原始音频")
-                subprocess.run([
-                    "ffmpeg", "-i", temp_video_path,
-                    "-vn", "-acodec", "pcm_s16le",
-                    "-ar", "16000", "-ac", "1",
-                    temp_audio_path, "-y"
-                ], check=True, capture_output=True)
-                logger.info(f"[自动翻译] 原始音频提取完成: {temp_audio_path}")
+                    logger.info(f"[自动翻译] 视频已保存到临时文件: {temp_video_path}")
 
-                audio_oss_key = f"audio_extraction/{task_id}_original.wav"
-                with open(temp_audio_path, 'rb') as audio_file:
-                    oss_service.upload_file(audio_oss_key, audio_file, content_type="audio/wav")
+                    temp_audio_path = temp_video_path.replace(".mp4", ".wav")
+                    logger.info(f"[自动翻译] 使用ffmpeg提取原始音频")
+                    subprocess.run([
+                        "ffmpeg", "-i", temp_video_path,
+                        "-vn", "-acodec", "pcm_s16le",
+                        "-ar", "16000", "-ac", "1",
+                        temp_audio_path, "-y"
+                    ], check=True, capture_output=True)
+                    logger.info(f"[自动翻译] 原始音频提取完成: {temp_audio_path}")
 
-                original_audio_url = oss_service.generate_presigned_url(audio_oss_key, expires=3600, method='GET')
-                logger.info(f"[自动翻译] 原始音频已上传到OSS，预签名URL: {original_audio_url}")
+                    audio_oss_key = f"audio_extraction/{task_id}_original.wav"
+                    with open(temp_audio_path, 'rb') as audio_file:
+                        oss_service.upload_file(audio_oss_key, audio_file, content_type="audio/wav")
 
-                logger.info(f"[自动翻译] 提交音频分离任务到MediaKit")
-                demix_job_id = await mediakit_service.submit_separate_voice_task(audio_url=original_audio_url)
+                    original_audio_url = oss_service.generate_presigned_url(audio_oss_key, expires=3600, method='GET')
+                    logger.info(f"[自动翻译] 原始音频已上传到OSS，预签名URL: {original_audio_url}")
 
-                if not demix_job_id:
-                    raise Exception("音频分离任务提交失败")
+                    logger.info(f"[自动翻译] 提交音频分离任务到MediaKit")
+                    demix_job_id = await mediakit_service.submit_separate_voice_task(audio_url=original_audio_url)
 
-                logger.info(f"[自动翻译] 音频分离任务已提交，任务ID: {demix_job_id}")
+                    if not demix_job_id:
+                        raise Exception("音频分离任务提交失败")
 
-                demix_max_attempts = 60
-                logger.info(f"[自动翻译] 等待音频分离完成（最多 {demix_max_attempts} 次尝试）")
-                for attempt in range(demix_max_attempts):
-                    await asyncio.sleep(10)
-                    demix_status = await mediakit_service.get_task_status(demix_job_id)
-                    status = demix_status.get('status') if demix_status else 'None'
-                    logger.info(f"[自动翻译] 音频分离状态检查 {attempt + 1}/{demix_max_attempts}: {status}")
+                    logger.info(f"[自动翻译] 音频分离任务已提交，任务ID: {demix_job_id}")
 
-                    if mediakit_service.is_task_completed(demix_status):
-                        logger.info(f"[自动翻译] 音频分离成功完成")
-                        result = demix_status.get("result", {})
-                        voice_audio_url = result.get("voice_audio_url") or result.get("vocal_audio_url")
-                        background_audio_url = result.get("background_audio_url")
-                        if background_audio_url:
-                            logger.info(f"[自动翻译] 背景音URL已保存: {background_audio_url}")
-                        if voice_audio_url:
-                            logger.info(f"[自动翻译] 人声音频URL将用于ATA字幕识别: {voice_audio_url}")
-                        else:
-                            logger.warning(f"[自动翻译] 音频分离完成但未返回人声音频URL，将使用原始音频提交ATA")
-                        break
-                    elif mediakit_service.is_task_failed(demix_status):
-                        raise Exception(f"音频分离任务失败: {demix_status}")
-                    elif attempt >= demix_max_attempts - 1:
-                        raise Exception("音频分离超时")
+                    demix_max_attempts = 60
+                    logger.info(f"[自动翻译] 等待音频分离完成（最多 {demix_max_attempts} 次尝试）")
+                    for attempt in range(demix_max_attempts):
+                        await asyncio.sleep(10)
+                        demix_status = await mediakit_service.get_task_status(demix_job_id)
+                        status = demix_status.get('status') if demix_status else 'None'
+                        logger.info(f"[自动翻译] 音频分离状态检查 {attempt + 1}/{demix_max_attempts}: {status}")
 
-            except Exception as e:
-                logger.error(f"[自动翻译] 音频分离失败: {str(e)}")
-                logger.warning(f"[自动翻译] 将使用原始音频提交ATA，并继续使用原视频音频")
-            finally:
-                logger.info(f"[自动翻译] 清理临时文件")
-                for temp_path in (temp_video_path, temp_audio_path):
-                    if temp_path and os.path.exists(temp_path):
-                        os.unlink(temp_path)
+                        if mediakit_service.is_task_completed(demix_status):
+                            logger.info(f"[自动翻译] 音频分离成功完成")
+                            result = demix_status.get("result", {})
+                            voice_audio_url = result.get("voice_audio_url") or result.get("vocal_audio_url")
+                            background_audio_url = result.get("background_audio_url")
+                            if background_audio_url:
+                                logger.info(f"[自动翻译] 背景音URL已保存: {background_audio_url}")
+                            if voice_audio_url:
+                                logger.info(f"[自动翻译] 人声音频URL将用于ATA字幕识别: {voice_audio_url}")
+                            else:
+                                logger.warning(f"[自动翻译] 音频分离完成但未返回人声音频URL，将使用原始音频提交ATA")
+                            break
+                        elif mediakit_service.is_task_failed(demix_status):
+                            raise Exception(f"音频分离任务失败: {demix_status}")
+                        elif attempt >= demix_max_attempts - 1:
+                            raise Exception("音频分离超时")
+
+                except Exception as e:
+                    logger.error(f"[自动翻译] 音频分离失败: {str(e)}")
+                    logger.warning(f"[自动翻译] 将使用原始音频提交ATA，并继续使用原视频音频")
+                finally:
+                    logger.info(f"[自动翻译] 清理临时文件")
+                    for temp_path in (temp_video_path, temp_audio_path):
+                        if temp_path and os.path.exists(temp_path):
+                            os.unlink(temp_path)
+
+                return voice_audio_url, original_audio_url, background_audio_url
+
+            async def subtitle_erasure_task():
+                """字幕擦除任务"""
+                erasure_video_url = None
+                if skip_subtitle_erasure:
+                    logger.info(f"[自动翻译] 步骤 1.2/3: 已开启跳过字幕擦除，任务ID: {task_id}")
+                    return None
+
+                logger.info(f"[自动翻译] 步骤 1.2/3: 执行字幕擦除，任务ID: {task_id}")
+
+                try:
+                    # Submit subtitle erasure task
+                    presigned_url = oss_service.generate_download_url(oss_key, expires=604800)
+                    logger.info(f"[自动翻译] 生成预签名URL用于字幕擦除: {presigned_url[:100]}...")
+
+                    volcengine_response = await volcengine_service.submit_subtitle_erase_task(
+                        presigned_url,
+                        "Subtitle"
+                    )
+                    logger.info(f"[自动翻译] 字幕擦除任务已提交，响应: {volcengine_response}")
+
+                    # Wait for subtitle erasure completion
+                    erasure_volcengine_task_id = volcengine_response.get("task_id")
+                    erasure_max_attempts = 600
+                    logger.info(f"[自动翻译] 等待字幕擦除完成（最多 {erasure_max_attempts} 次尝试）")
+
+                    for attempt in range(erasure_max_attempts):
+                        await asyncio.sleep(10)
+                        try:
+                            erasure_status = await volcengine_service.get_task_status(erasure_volcengine_task_id)
+                            logger.info(f"[自动翻译] 字幕擦除状态检查 {attempt + 1}/{erasure_max_attempts}: {erasure_status.get('status')}")
+
+                            if erasure_status.get("status") == "success" or (erasure_status.get("success", False) and "result" in erasure_status):
+                                result = erasure_status.get("result", {})
+                                erasure_video_url = result.get("video_url")
+                                logger.info(f"[自动翻译] 字幕擦除成功完成，结果视频URL: {erasure_video_url}")
+                                break
+                            elif erasure_status.get("status") == "failed" or "error" in erasure_status:
+                                logger.warning(f"[自动翻译] 字幕擦除失败，将使用原视频继续")
+                                erasure_video_url = file_url
+                                break
+                        except Exception as e:
+                            logger.warning(f"[自动翻译] 字幕擦除状态检查第 {attempt + 1} 次失败: {str(e)}")
+                            if attempt >= erasure_max_attempts - 1:
+                                logger.warning(f"[自动翻译] 字幕擦除超时，将使用原视频继续")
+                                erasure_video_url = file_url
+                except Exception as e:
+                    logger.error(f"[自动翻译] 字幕擦除失败: {str(e)}")
+                    erasure_video_url = file_url
+
+                return erasure_video_url
+
+            # 并行执行音频分离和字幕擦除
+            audio_result, erasure_result = await asyncio.gather(
+                audio_separation_task(),
+                subtitle_erasure_task()
+            )
+
+            voice_audio_url, original_audio_url, background_audio_url = audio_result
+            erasure_video_url = erasure_result
 
             # Submit to ATA after audio separation
             ata_audio_url = voice_audio_url or original_audio_url
@@ -181,49 +248,6 @@ class AutoTranslationService:
             if not subtitle_data:
                 raise Exception("字幕提取失败，无法获取字幕数据")
 
-            erasure_video_url = None
-            if skip_subtitle_erasure:
-                logger.info(f"[自动翻译] 步骤 2/3: 已开启跳过字幕擦除，任务ID: {task_id}")
-            else:
-                # Step 2: Subtitle Erasure
-                logger.info(f"[自动翻译] 步骤 2/3: 执行字幕擦除，任务ID: {task_id}")
-
-                # Submit subtitle erasure task
-                presigned_url = oss_service.generate_download_url(oss_key, expires=604800)
-                logger.info(f"[自动翻译] 生成预签名URL用于字幕擦除: {presigned_url[:100]}...")
-                
-                volcengine_response = await volcengine_service.submit_subtitle_erase_task(
-                    presigned_url,
-                    "Subtitle"
-                )
-                logger.info(f"[自动翻译] 字幕擦除任务已提交，响应: {volcengine_response}")
-                
-                # Wait for subtitle erasure completion
-                erasure_volcengine_task_id = volcengine_response.get("task_id")
-                erasure_max_attempts = 600
-                logger.info(f"[自动翻译] 等待字幕擦除完成（最多 {erasure_max_attempts} 次尝试）")
-                
-                for attempt in range(erasure_max_attempts):
-                    await asyncio.sleep(10)
-                    try:
-                        erasure_status = await volcengine_service.get_task_status(erasure_volcengine_task_id)
-                        logger.info(f"[自动翻译] 字幕擦除状态检查 {attempt + 1}/{erasure_max_attempts}: {erasure_status.get('status')}")
-                        
-                        if erasure_status.get("status") == "success" or (erasure_status.get("success", False) and "result" in erasure_status):
-                            result = erasure_status.get("result", {})
-                            erasure_video_url = result.get("video_url")
-                            logger.info(f"[自动翻译] 字幕擦除成功完成，结果视频URL: {erasure_video_url}")
-                            break
-                        elif erasure_status.get("status") == "failed" or "error" in erasure_status:
-                            logger.warning(f"[自动翻译] 字幕擦除失败，将使用原视频继续")
-                            erasure_video_url = file_url
-                            break
-                    except Exception as e:
-                        logger.warning(f"[自动翻译] 字幕擦除状态检查第 {attempt + 1} 次失败: {str(e)}")
-                        if attempt >= erasure_max_attempts - 1:
-                            logger.warning(f"[自动翻译] 字幕擦除超时，将使用原视频继续")
-                            erasure_video_url = file_url
-            
             # Use erasure video if available, otherwise use original video
             final_video_url = erasure_video_url or file_url
             logger.info(f"[自动翻译] 将使用视频进行翻译: {final_video_url}")
