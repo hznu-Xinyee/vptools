@@ -2,11 +2,8 @@ import uuid
 import logging
 import json
 import httpx
-import os
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
-from pydantic import BaseModel
 from app.schemas import TranslateVideoRequest, TranslateVideoResponse, AutoTranslationRequest, AutoTranslationResponse
 from app.translation_service import translation_service
 from app.tts_service import tts_service
@@ -14,8 +11,6 @@ from app.oss_service import oss_service
 from app.timeline_service import timeline_service
 from app.ice_service import ice_service
 from app.auto_translation_service import auto_translation_service
-from app.elevenlabs_service import elevenlabs_service
-from app.continuous_dubbing_service import continuous_dubbing_service
 
 app = FastAPI(title="VP Video Translation Docker Service", version="0.1.0")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -126,74 +121,6 @@ def health_check():
     return {"status": "healthy"}
 
 
-class GenerateVoicePreviewRequest(BaseModel):
-    voice_id: str
-    language: str
-
-
-@app.post("/generate-voice-preview")
-async def generate_voice_preview(request: GenerateVoicePreviewRequest):
-    """Generate a preview audio file for a custom voice"""
-    try:
-        # 创建 hello_voices 目录
-        hello_voices_dir = Path("/Users/montageai/Desktop/vp_dev/vptools/video-translation-docker-service/hello_voices")
-        hello_voices_dir.mkdir(exist_ok=True)
-
-        # 根据语言选择问候语
-        greetings = {
-            'zh': '你好',
-            'en': 'Hello',
-            'ja': 'こんにちは',
-            'ko': '안녕하세요',
-            'es': 'Hola',
-            'fr': 'Bonjour',
-            'de': 'Hallo',
-            'it': 'Ciao',
-            'pt': 'Olá',
-            'ru': 'Привет',
-            'ar': 'مرحبا',
-            'hi': 'नमस्ते',
-            'th': 'สวัสดี',
-            'vi': 'Xin chào',
-            'id': 'Halo',
-            'tr': 'Merhaba',
-            'pl': 'Cześć',
-            'nl': 'Hallo',
-            'sv': 'Hej',
-        }
-
-        greeting_text = greetings.get(request.language, 'Hello')
-
-        # 使用 ElevenLabs 生成音频
-        logger.info(f"Generating voice preview for voice_id={request.voice_id}, language={request.language}, text={greeting_text}")
-        audio_data = await elevenlabs_service.synthesize(greeting_text, request.voice_id)
-
-        # 保存音频文件
-        audio_filename = f"{request.voice_id}.mp3"
-        audio_path = hello_voices_dir / audio_filename
-        audio_path.write_bytes(audio_data)
-
-        logger.info(f"Voice preview saved to {audio_path}")
-
-        return {
-            "status": "success",
-            "audio_url": f"/hello-voices/{audio_filename}",
-            "voice_id": request.voice_id
-        }
-    except Exception as e:
-        logger.exception(f"Failed to generate voice preview: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/hello-voices/{filename}")
-async def serve_hello_voice(filename: str):
-    """Serve hello voice audio files"""
-    file_path = Path("/Users/montageai/Desktop/vp_dev/vptools/video-translation-docker-service/hello_voices") / filename
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Audio file not found")
-    return FileResponse(file_path, media_type="audio/mpeg")
-
-
 @app.post("/auto-translation", response_model=AutoTranslationResponse)
 async def submit_auto_translation(
     request: AutoTranslationRequest
@@ -220,10 +147,7 @@ async def submit_auto_translation(
             request.original_filename,
             target_languages,
             request.skip_subtitle_erasure,
-            request.subtitle_params.model_dump() if request.subtitle_params else None,
-            request.custom_voice_id,
-            request.custom_voice_map,
-            request.continuous_dubbing
+            request.subtitle_params.model_dump() if request.subtitle_params else None
         )
 
         return AutoTranslationResponse(**result)
@@ -286,8 +210,7 @@ async def translate_video(request: TranslateVideoRequest):
             )
             tts_result = await tts_service.synthesize_with_timestamps(
                 translated_text,
-                request.target_language,
-                request.custom_voice_id
+                request.target_language
             )
             audio_data = tts_result.audio_data
             translated_subtitle["tts_timestamps"] = tts_result.timestamps
@@ -338,8 +261,7 @@ async def translate_video(request: TranslateVideoRequest):
                 )
                 tts_result = await tts_service.synthesize_with_timestamps(
                     translated_text,
-                    request.target_language,
-                    request.custom_voice_id
+                    request.target_language
                 )
                 audio_data = tts_result.audio_data
                 logger.info(
@@ -373,65 +295,6 @@ async def translate_video(request: TranslateVideoRequest):
                     translated_subtitles[idx]["audio_speed"] = 1.0
                     logger.info("subtitle[%s] replaced with shortened translation", idx)
 
-        # Step 3.5: Apply continuous dubbing alignment if enabled
-        if request.continuous_dubbing:
-            logger.info("Continuous dubbing mode enabled, calculating alignment strategies")
-            alignment_strategies = continuous_dubbing_service.calculate_alignment_strategy(
-                original_subtitles,
-                translated_subtitles,
-                audio_duration_list
-            )
-
-            # Apply TTS speed adjustments and update audio data
-            for strategy in alignment_strategies:
-                idx = strategy["index"]
-                tts_speed = strategy["tts_speed"]
-
-                # Apply TTS speed adjustment if needed
-                if tts_speed > 1.01:  # Only adjust if speed is significantly > 1.0
-                    logger.info(
-                        "subtitle[%s] applying TTS speed adjustment speed=%s",
-                        idx,
-                        tts_speed
-                    )
-                    original_audio = audio_data_list[idx]
-                    adjusted_audio = await continuous_dubbing_service.adjust_audio_speed(
-                        original_audio,
-                        tts_speed
-                    )
-                    audio_data_list[idx] = adjusted_audio
-
-                    # Update audio duration after speed adjustment
-                    new_duration = tts_service.get_audio_duration(adjusted_audio)
-                    audio_duration_list[idx] = new_duration
-                    logger.info(
-                        "subtitle[%s] TTS speed adjusted original_duration=%s new_duration=%s",
-                        idx,
-                        strategy["tts_duration"],
-                        new_duration
-                    )
-
-                # Update subtitle timestamps and speeds
-                translated_subtitles[idx]["start_time"] = strategy["adjusted_start"]
-                translated_subtitles[idx]["end_time"] = strategy["adjusted_end"]
-                translated_subtitles[idx]["audio_speed"] = 1.0  # Audio already adjusted
-                translated_subtitles[idx]["video_speed"] = strategy["video_speed"]
-                translated_subtitles[idx]["continuous_dubbing"] = True
-
-                logger.info(
-                    "subtitle[%s] continuous dubbing alignment applied: "
-                    "original[%s-%s] -> adjusted[%s-%s], "
-                    "tts_speed=%s, video_speed=%s, final_duration=%s",
-                    idx,
-                    strategy["original_start"],
-                    strategy["original_end"],
-                    strategy["adjusted_start"],
-                    strategy["adjusted_end"],
-                    strategy["tts_speed"],
-                    strategy["video_speed"],
-                    strategy["final_duration"]
-                )
-
         # Step 4: Upload and register audio segments
         for index, translated_subtitle in enumerate(translated_subtitles):
             audio_data = audio_data_list[index]
@@ -463,10 +326,8 @@ async def translate_video(request: TranslateVideoRequest):
                     "end_time": current_end_time,
                     "audio_media_id": audio_media_id,
                     "audio_speed": translated_subtitle.get("audio_speed", 1.0),
-                    "video_speed": translated_subtitle.get("video_speed", 1.0),
                     "audio_duration": audio_duration_list[index] if index < len(audio_duration_list) else 0.0,
-                    "tts_timestamps": translated_subtitle.get("tts_timestamps", []),
-                    "continuous_dubbing": translated_subtitle.get("continuous_dubbing", False)
+                    "tts_timestamps": translated_subtitle.get("tts_timestamps", [])
                 }
             )
 
