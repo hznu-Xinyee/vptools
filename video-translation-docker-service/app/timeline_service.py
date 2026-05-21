@@ -186,7 +186,7 @@ class TimelineService:
                     "Effects": [
                         {
                             "Type": "Volume",
-                            "Gain": 0
+                            "Gain": -100
                         }
                     ]
                 }
@@ -210,7 +210,7 @@ class TimelineService:
                     "Effects": [
                         {
                             "Type": "Volume",
-                            "Gain": 0
+                            "Gain": -100
                         }
                     ]
                 }

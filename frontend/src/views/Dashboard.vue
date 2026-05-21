@@ -518,16 +518,16 @@
                 />
               </label>
 
-              <label class="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2">
+              <label class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 opacity-60">
                 <div>
                   <div class="text-xs font-medium text-gray-800">口播连续版</div>
-                  <div class="text-[10px] text-gray-400">TTS音频首尾相连，通过调整视频速度实现对齐</div>
+                  <div class="text-[10px] text-gray-400">即将上线</div>
                 </div>
                 <input
                   v-model="autoContinuousDubbing"
                   type="checkbox"
-                  :disabled="autoIsProcessing"
-                  class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  disabled
+                  class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-not-allowed"
                 />
               </label>
 
@@ -2047,25 +2047,16 @@ const subtitleBottomPosition = ref(30)
 const showSubtitlePreview = ref(false)
 const videoMetadataLoaded = ref(0) // Counter to force computed recalculation
 const subtitlePreviewFontSize = computed(() => {
-  // Scale font size based on actual video resolution
-  // FontSize in ICE is absolute pixels, so we need to scale preview based on actual video height
+  // Fixed font size for preview, independent of video resolution
+  // The preview card is fixed at 360px width with 9:16 aspect ratio (640px height)
+  // Scale font size based on the fixed preview container, not the actual video resolution
 
-  if (!autoPreviewVideoRef.value) {
-    return autoFontSize.value
-  }
+  const PREVIEW_CONTAINER_HEIGHT = 640 // 360px * 16/9
+  const REFERENCE_VIDEO_HEIGHT = 1920 // Assume 1080x1920 as reference (vertical video)
 
-  const videoElement = autoPreviewVideoRef.value
-  const containerHeight = videoElement.clientHeight
-  const actualVideoHeight = videoElement.videoHeight
-
-  if (!containerHeight || containerHeight === 0 || !actualVideoHeight || actualVideoHeight === 0) {
-    return autoFontSize.value
-  }
-
-  // Scale based on actual video resolution
-  // If video is 1080p and container shows 540px, scale = 0.5
-  // If autoFontSize = 50, preview shows 25px
-  const scale = containerHeight / actualVideoHeight
+  // Scale the font size to fit the fixed preview container
+  // This ensures consistent subtitle size regardless of actual video resolution
+  const scale = PREVIEW_CONTAINER_HEIGHT / REFERENCE_VIDEO_HEIGHT
 
   return Math.round(autoFontSize.value * scale)
 })
