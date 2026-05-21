@@ -233,6 +233,8 @@ class AutoTranslationService:
 
             for target_language in target_languages:
                 logger.info(f"[自动翻译] 提交 {target_language} 视频翻译到Docker服务")
+                logger.info(f"[自动翻译] custom_voice_map 参数: {custom_voice_map}")
+                logger.info(f"[自动翻译] custom_voice_id 参数: {custom_voice_id}")
                 language_results[target_language] = {
                     **language_results.get(target_language, {}),
                     "status": "processing",
@@ -246,6 +248,8 @@ class AutoTranslationService:
                 elif custom_voice_id:
                     voice_id_for_language = custom_voice_id
                     logger.info(f"[自动翻译] {target_language} 使用全局自定义音色: {voice_id_for_language}")
+                else:
+                    logger.info(f"[自动翻译] {target_language} 未指定自定义音色，将使用默认音色")
 
                 try:
                     docker_response = await self._submit_video_translation(

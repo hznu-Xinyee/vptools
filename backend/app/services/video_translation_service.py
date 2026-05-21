@@ -87,15 +87,16 @@ class VideoTranslationService:
             "skip_subtitle_erasure": skip_subtitle_erasure,
             "subtitle_params": subtitle_params,
             "custom_voice_id": custom_voice_id,
-            "custom_voice_id_map": custom_voice_id_map,
+            "custom_voice_map": custom_voice_id_map,  # 修正字段名
             "continuous_dubbing": continuous_dubbing
         }
 
         logger.info(
-            "Submitting auto translation task_id=%s oss_key=%s target_languages=%s",
+            "Submitting auto translation task_id=%s oss_key=%s target_languages=%s custom_voice_map=%s",
             task_id,
             oss_key,
-            target_languages
+            target_languages,
+            custom_voice_id_map
         )
 
         async with httpx.AsyncClient(timeout=1800.0) as client:

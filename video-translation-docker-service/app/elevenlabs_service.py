@@ -18,9 +18,17 @@ class ElevenLabsService:
         self.api_key = settings.ELEVENLABS_API_KEY
         self.model_id = "eleven_flash_v2_5"
         self.client = None
-        
+
+        logger.info(f"[ElevenLabs] 初始化服务，API key 存在: {bool(self.api_key)}, ElevenLabs 库已导入: {ElevenLabs is not None}")
+
         if ElevenLabs and self.api_key:
             self.client = ElevenLabs(api_key=self.api_key)
+            logger.info("[ElevenLabs] 客户端初始化成功")
+        else:
+            if not ElevenLabs:
+                logger.warning("[ElevenLabs] ElevenLabs 库未安装")
+            if not self.api_key:
+                logger.warning("[ElevenLabs] ELEVENLABS_API_KEY 未配置")
     
     async def synthesize(self, text: str, voice_id: str) -> bytes:
         """Synthesize speech using ElevenLabs"""

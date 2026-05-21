@@ -286,7 +286,8 @@ async def translate_video(request: TranslateVideoRequest):
             )
             tts_result = await tts_service.synthesize_with_timestamps(
                 translated_text,
-                request.target_language
+                request.target_language,
+                request.custom_voice_id
             )
             audio_data = tts_result.audio_data
             translated_subtitle["tts_timestamps"] = tts_result.timestamps
@@ -337,7 +338,8 @@ async def translate_video(request: TranslateVideoRequest):
                 )
                 tts_result = await tts_service.synthesize_with_timestamps(
                     translated_text,
-                    request.target_language
+                    request.target_language,
+                    request.custom_voice_id
                 )
                 audio_data = tts_result.audio_data
                 logger.info(

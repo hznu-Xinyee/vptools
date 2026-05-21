@@ -185,6 +185,7 @@ class TTSService:
         return (await self.synthesize_with_timestamps(text, language, voice_id)).audio_data
 
     async def synthesize_with_timestamps(self, text: str, language: str, voice_id: Optional[str] = None) -> TTSResult:
+        logger.info(f"[TTS] synthesize_with_timestamps 调用: language={language}, voice_id={voice_id}")
         if not text or not text.strip():
             return TTSResult(audio_data=b"", timestamps=[])
 

@@ -388,6 +388,7 @@ async def submit_auto_translation_to_fc_background(
             if custom_voice_map:
                 from app.models.custom_voice import CustomVoice
                 custom_voice_voice_id_map = {}
+                logger.info(f"[自动翻译] 收到 custom_voice_map: {custom_voice_map}")
                 for lang_code, voice_id in custom_voice_map.items():
                     custom_voice = db.query(CustomVoice).filter(
                         CustomVoice.id == voice_id,
@@ -396,6 +397,10 @@ async def submit_auto_translation_to_fc_background(
                     ).first()
                     if custom_voice:
                         custom_voice_voice_id_map[lang_code] = custom_voice.voice_id
+                        logger.info(f"[自动翻译] {lang_code} 映射到 voice_id: {custom_voice.voice_id}")
+                    else:
+                        logger.warning(f"[自动翻译] {lang_code} 的自定义音色 ID {voice_id} 未找到或不可用")
+                logger.info(f"[自动翻译] 最终 custom_voice_voice_id_map: {custom_voice_voice_id_map}")
 
 
             task.current_stage = "video_translation"
