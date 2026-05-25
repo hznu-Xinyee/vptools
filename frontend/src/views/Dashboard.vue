@@ -1039,14 +1039,37 @@
                   </option>
                 </select>
               </div>
+              <div v-if="autoExpandedHistory.length > 0" class="mb-3 rounded-lg border border-gray-100 bg-gray-50/80 p-2">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div class="flex items-center gap-2">
+                    <button
+                      type="button"
+                      @click="toggleSelectAllAutoHistory"
+                      class="px-2.5 py-1 rounded-md border text-[11px] font-medium transition"
+                      :class="isAutoCurrentPageFullySelected ? 'border-indigo-600 bg-indigo-600 text-white shadow-sm' : 'border-gray-200 bg-white text-gray-700 hover:border-indigo-300 hover:text-indigo-600'"
+                    >
+                      {{ isAutoCurrentPageFullySelected ? '取消' : '全选' }}
+                    </button>
+                    <span class="text-[10px] text-gray-500">已选 {{ autoSelectedHistoryItems.length }}/{{ autoExpandedHistory.length }}</span>
+                  </div>
+                  <button
+                    type="button"
+                    @click="downloadSelectedAutoHistory"
+                    :disabled="autoDownloadableSelectedHistoryItems.length === 0"
+                    class="px-2.5 py-1 rounded-md bg-green-50 text-[11px] font-medium text-green-700 transition hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    下载选中<span v-if="autoDownloadableSelectedHistoryItems.length > 0">({{ autoDownloadableSelectedHistoryItems.length }})</span>
+                  </button>
+                </div>
+              </div>
               <div v-if="autoExpandedHistory.length === 0" class="text-center py-6 text-gray-400 text-xs">暂无自动翻译记录</div>
               <div v-else :class="isHistoryExpanded ? 'grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] items-start gap-3 pr-1 pb-3' : 'space-y-2.5'">
                 <div
                   v-for="item in autoExpandedHistory"
                   :key="item.id"
                   @click="playExpandedVideo(item)"
-                  class="relative overflow-hidden rounded-lg border border-gray-200 cursor-pointer hover:border-indigo-400 transition bg-white"
-                  :class="isHistoryExpanded ? 'p-0' : 'p-2.5'"
+                  class="relative overflow-hidden rounded-lg border cursor-pointer hover:border-indigo-400 transition"
+                  :class="[isHistoryExpanded ? 'p-0' : 'p-2.5', isAutoHistoryItemSelected(item) ? 'border-indigo-500 bg-indigo-50/40 ring-2 ring-indigo-200 shadow-sm' : 'border-gray-200 bg-white']"
                 >
                   <div v-if="isHistoryExpanded && (item.result_video_url || item.videoUrl)" class="w-full rounded-t-lg overflow-hidden flex items-center justify-center bg-gray-50">
                     <video
@@ -1062,6 +1085,17 @@
                   </div>
                   <div class="relative z-10" :class="isHistoryExpanded ? 'p-2.5' : ''">
                   <div class="flex justify-between items-start gap-2">
+                    <button
+                      type="button"
+                      @click.stop="toggleAutoHistoryItemSelection(item)"
+                      class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition"
+                      :class="isAutoHistoryItemSelected(item) ? 'border-indigo-600 bg-indigo-600 text-white shadow-sm' : 'border-gray-300 bg-white text-transparent hover:border-indigo-400 hover:text-indigo-300'"
+                      :title="isAutoHistoryItemSelected(item) ? '取消选中' : '选中任务'"
+                    >
+                      <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </button>
                     <div class="flex-1 min-w-0">
                       <p v-if="editingAutoTaskId !== item.taskId" class="text-gray-900 text-xs font-medium truncate">{{ item.original_filename }}</p>
                       <input v-else v-model="editingAutoTaskName" @click.stop @blur="saveAutoTaskName" @keyup.enter="saveAutoTaskName" @keyup.esc="cancelEditAutoTaskName" ref="autoEditInput" class="text-gray-900 text-xs font-medium w-full border border-indigo-400 rounded px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-indigo-200" />
@@ -3618,6 +3652,66 @@ const autoFilterLanguage = ref('')
 const autoAvailableTags = ref([])
 const autoExpandedHistory = ref([])
 const autoHistoryThumbnails = ref({})
+const autoSelectedHistoryIds = ref([])
+
+const autoSelectedHistoryItems = computed(() => autoExpandedHistory.value.filter(item => autoSelectedHistoryIds.value.includes(item.id)))
+const autoDownloadableSelectedHistoryItems = computed(() => autoSelectedHistoryItems.value.filter(item => item.result_video_url || item.videoUrl))
+const isAutoCurrentPageFullySelected = computed(() => autoExpandedHistory.value.length > 0 && autoExpandedHistory.value.every(item => autoSelectedHistoryIds.value.includes(item.id)))
+
+const syncAutoHistorySelectionWithCurrentPage = () => {
+  const currentPageIds = new Set(autoExpandedHistory.value.map(item => item.id))
+  autoSelectedHistoryIds.value = autoSelectedHistoryIds.value.filter(id => currentPageIds.has(id))
+}
+
+const isAutoHistoryItemSelected = (item) => autoSelectedHistoryIds.value.includes(item.id)
+
+const toggleAutoHistoryItemSelection = (item) => {
+  if (isAutoHistoryItemSelected(item)) {
+    autoSelectedHistoryIds.value = autoSelectedHistoryIds.value.filter(id => id !== item.id)
+  } else {
+    autoSelectedHistoryIds.value = [...autoSelectedHistoryIds.value, item.id]
+  }
+}
+
+const toggleSelectAllAutoHistory = () => {
+  autoSelectedHistoryIds.value = isAutoCurrentPageFullySelected.value
+    ? []
+    : autoExpandedHistory.value.map(item => item.id)
+}
+
+const getAutoHistoryDownloadExtension = (item) => {
+  const videoUrl = item.result_video_url || item.videoUrl || ''
+  const urlPath = videoUrl.split('?')[0].split('#')[0]
+  const urlMatch = urlPath.match(/\.([a-zA-Z0-9]{2,5})$/)
+  const nameMatch = (item.original_filename || '').match(/\.([a-zA-Z0-9]{2,5})$/)
+
+  return (urlMatch?.[1] || nameMatch?.[1] || 'mp4').toLowerCase()
+}
+
+const sanitizeAutoHistoryDownloadName = (name) => (name || 'translated-video').replace(/[\\/:*?"<>|]/g, '_')
+
+const getAutoHistoryDownloadName = (item) => {
+  const baseName = sanitizeAutoHistoryDownloadName((item.original_filename || 'translated-video').replace(/\.[^/.]+$/, ''))
+  const languageName = sanitizeAutoHistoryDownloadName(item.languageName || item.languageCode || 'translation')
+  const extension = getAutoHistoryDownloadExtension(item)
+
+  return `${baseName}_${languageName}.${extension}`
+}
+
+const downloadSelectedAutoHistory = () => {
+  autoDownloadableSelectedHistoryItems.value.forEach(item => {
+    const videoUrl = item.result_video_url || item.videoUrl
+    if (!videoUrl) return
+
+    const link = document.createElement('a')
+    link.href = videoUrl
+    link.download = getAutoHistoryDownloadName(item)
+    link.style.display = 'none'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  })
+}
 
 const generateHistoryVideoThumbnail = (item) => {
   const videoUrl = item.result_video_url || item.videoUrl
@@ -3755,6 +3849,7 @@ const loadAutoTranslationHistory = async () => {
     autoExpandedHistory.value = filteredItems.slice(startIndex, endIndex)
     autoExpandedHistory.value.forEach(generateHistoryVideoThumbnail)
     autoTotalPages.value = Math.ceil(filteredItems.length / autoPageSize.value) || 1
+    syncAutoHistorySelectionWithCurrentPage()
   } catch (error) {
     console.error('Failed to load auto translation history:', error)
   }
