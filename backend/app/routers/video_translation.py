@@ -338,6 +338,7 @@ class AutoTranslationSubmitRequest(BaseModel):
     original_video_url: Optional[str] = None
     skip_subtitle_erasure: bool = False
     full_screen_erase: bool = True
+    hide_subtitles: bool = False
     subtitle_params: Optional[SubtitleParams] = None
     tags: Optional[List[str]] = None
     custom_voice_id: Optional[int] = None
@@ -355,6 +356,7 @@ async def submit_auto_translation_to_fc_background(
     target_languages: List[str],
     skip_subtitle_erasure: bool,
     full_screen_erase: bool,
+    hide_subtitles: bool,
     subtitle_params: Optional[Dict[str, Any]],
     custom_voice_id: Optional[int] = None,
     custom_voice_map: Optional[Dict[str, Optional[str]]] = None,  # Map language code to voice_id string
@@ -419,6 +421,7 @@ async def submit_auto_translation_to_fc_background(
                 custom_voice_id_map=custom_voice_voice_id_map,
                 skip_subtitle_erasure=skip_subtitle_erasure,
                 full_screen_erase=full_screen_erase,
+                hide_subtitles=hide_subtitles,
                 subtitle_params=subtitle_params,
                 continuous_dubbing=continuous_dubbing,
                 use_test_version=use_test_version
@@ -503,6 +506,7 @@ async def submit_auto_translation(
             target_languages,
             request.skip_subtitle_erasure,
             request.full_screen_erase,
+            request.hide_subtitles,
             subtitle_params,
             request.custom_voice_id,
             request.custom_voice_map,

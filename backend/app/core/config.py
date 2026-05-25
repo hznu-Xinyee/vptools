@@ -30,6 +30,7 @@ class Settings(BaseSettings):
 
     # Video Translation Docker Service
     VIDEO_TRANSLATION_DOCKER_URL: Optional[str] = None
+    VIDEO_TRANSLATION_DOCKER_URL_TEST: Optional[str] = None
 
     # FC/Docker Service Callback API Key
     CALLBACK_API_KEY: str = "your-callback-api-key-change-in-production"

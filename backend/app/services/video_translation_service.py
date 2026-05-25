@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 class VideoTranslationService:
     def __init__(self):
         self.service_url = settings.VIDEO_TRANSLATION_DOCKER_URL
+        self.service_url_test = settings.VIDEO_TRANSLATION_DOCKER_URL_TEST
 
     async def submit_task(
         self,
@@ -67,15 +68,25 @@ class VideoTranslationService:
         target_language: Optional[str] = None,
         target_languages: Optional[List[str]] = None,
         skip_subtitle_erasure: bool = False,
+        full_screen_erase: bool = True,
+        hide_subtitles: bool = False,
         subtitle_params: Optional[Dict[str, Any]] = None,
         custom_voice_id: Optional[str] = None,
         custom_voice_id_map: Optional[Dict[str, str]] = None,
-        continuous_dubbing: bool = False
+        continuous_dubbing: bool = False,
+        use_test_version: bool = False
     ) -> Dict[str, Any]:
         """Submit auto translation task to docker service"""
-        if not self.service_url:
-            logger.warning("VIDEO_TRANSLATION_DOCKER_URL is not configured")
+        logger.info(f"[自动翻译] submit_auto_translation 接收到 hide_subtitles={hide_subtitles}, use_test_version={use_test_version}")
+
+        # 根据 use_test_version 选择 FC 服务地址
+        service_url = self.service_url_test if use_test_version else self.service_url
+
+        if not service_url:
+            logger.warning(f"VIDEO_TRANSLATION_DOCKER_URL{'_TEST' if use_test_version else ''} is not configured")
             return {"status": "failed", "error_message": "Docker service URL not configured"}
+
+        logger.info(f"[自动翻译] 使用 FC 服务地址: {service_url}")
 
         payload = {
             "task_id": task_id,
@@ -85,10 +96,13 @@ class VideoTranslationService:
             "target_language": target_language,
             "target_languages": target_languages,
             "skip_subtitle_erasure": skip_subtitle_erasure,
+            "full_screen_erase": full_screen_erase,
+            "hide_subtitles": hide_subtitles,
             "subtitle_params": subtitle_params,
             "custom_voice_id": custom_voice_id,
             "custom_voice_map": custom_voice_id_map,  # 修正字段名
-            "continuous_dubbing": continuous_dubbing
+            "continuous_dubbing": continuous_dubbing,
+            "use_test_version": use_test_version
         }
 
         logger.info(
@@ -101,7 +115,7 @@ class VideoTranslationService:
 
         async with httpx.AsyncClient(timeout=1800.0) as client:
             response = await client.post(
-                f"{self.service_url.rstrip('/')}/auto-translation",
+                f"{service_url.rstrip('/')}/auto-translation",
                 json=payload,
                 headers={"x-fc-invocation-type": "Async"}
             )

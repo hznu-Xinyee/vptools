@@ -531,6 +531,19 @@
                 />
               </label>
 
+              <label class="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2">
+                <div>
+                  <div class="text-xs font-medium text-gray-800">关闭字幕显示</div>
+                  <div class="text-[10px] text-gray-400">渲染时不显示翻译后的字幕</div>
+                </div>
+                <input
+                  v-model="autoHideSubtitles"
+                  type="checkbox"
+                  :disabled="autoIsProcessing"
+                  class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+              </label>
+
               <label class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 opacity-60">
                 <div>
                   <div class="text-xs font-medium text-gray-800">口播连续版</div>
@@ -2123,6 +2136,7 @@ try {
 }
 const autoSkipSubtitleErasure = ref(false)
 const autoFullScreenErase = ref(true)
+const autoHideSubtitles = ref(false)
 const autoContinuousDubbing = ref(false)
 const autoSubtitleStyleId = ref('default')
 const selectedAutoSubtitleStyle = computed(() => AUTO_SUBTITLE_STYLE_OPTIONS.find(style => style.id === autoSubtitleStyleId.value) || AUTO_SUBTITLE_STYLE_OPTIONS[0])
@@ -3464,6 +3478,7 @@ const startAutoTranslation = async () => {
           original_video_url: fileUrl,
           skip_subtitle_erasure: autoSkipSubtitleErasure.value,
           full_screen_erase: autoFullScreenErase.value,
+          hide_subtitles: autoHideSubtitles.value,
           continuous_dubbing: autoContinuousDubbing.value,
           subtitle_params: buildAutoSubtitleParams(),
           tags: autoTaskTags.value,
