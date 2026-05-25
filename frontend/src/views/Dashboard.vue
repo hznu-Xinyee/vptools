@@ -518,6 +518,19 @@
                 />
               </label>
 
+              <label class="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2">
+                <div>
+                  <div class="text-xs font-medium text-gray-800">全屏字幕擦除</div>
+                  <div class="text-[10px] text-gray-400">开启后使用全屏擦除模式（推荐）</div>
+                </div>
+                <input
+                  v-model="autoFullScreenErase"
+                  type="checkbox"
+                  :disabled="autoIsProcessing || autoSkipSubtitleErasure"
+                  class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+              </label>
+
               <label class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 opacity-60">
                 <div>
                   <div class="text-xs font-medium text-gray-800">口播连续版</div>
@@ -533,53 +546,65 @@
 
               <div class="pt-1">
                 <div class="flex items-center justify-between mb-2">
-                  <label class="block text-[11px] text-gray-500">目标语言</label>
+                  <label class="block text-[11px] text-gray-500">目标语言和音色</label>
                   <span class="text-[11px] text-indigo-600">已选 {{ autoTargetLanguages.length }} 门</span>
                 </div>
+                <div class="text-[10px] text-gray-500 mb-2">点击语言卡片选择该语言，点击"选择音色"按钮为该语言选择音色（选择后会记住）</div>
                 <div class="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
                   <div
                     v-for="language in LANGUAGE_OPTIONS"
                     :key="language.code"
                     class="relative"
                   >
-                    <button
-                      type="button"
-                      @click="toggleAutoTargetLanguage(language.code)"
+                    <div
                       class="w-full px-2.5 py-2 rounded-lg border text-left text-xs transition"
-                      :class="autoTargetLanguages.includes(language.code) ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm' : 'border-gray-200 bg-white text-gray-700 hover:border-indigo-300'"
+                      :class="autoTargetLanguages.includes(language.code) ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm' : 'border-gray-200 bg-white text-gray-700'"
                     >
-                      <span class="font-medium">{{ language.name }}</span>
-                      <span class="block text-[10px] opacity-70">
-                        {{ customVoiceMap[language.code] ? customVoiceMap[language.code].name : language.voice }} ·
-                        {{ customVoiceMap[language.code] ? (customVoiceMap[language.code].gender === 'male' ? '男声' : customVoiceMap[language.code].gender === 'female' ? '女声' : '其他') : language.gender }}
-                        <span v-if="customVoiceMap[language.code]" class="text-indigo-600">（自定义）</span>
-                      </span>
-                    </button>
-                    <!-- 试听按钮 -->
-                    <button
-                      type="button"
-                      @click.stop="playHelloVoice(language.code)"
-                      class="absolute top-1 right-1 w-6 h-6 flex items-center justify-center rounded-full bg-white border border-gray-300 hover:bg-indigo-50 hover:border-indigo-400 transition shadow-sm"
-                      :class="currentPlayingLanguage === language.code ? 'bg-indigo-100 border-indigo-500' : ''"
-                      title="试听"
-                    >
-                      <svg v-if="currentPlayingLanguage === language.code" class="w-3 h-3 text-indigo-600" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
-                      </svg>
-                      <svg v-else class="w-3 h-3 text-gray-600" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M8 5v14l11-7z"/>
-                      </svg>
-                    </button>
+                      <div class="flex items-start justify-between mb-1">
+                        <button
+                          type="button"
+                          @click="toggleAutoTargetLanguage(language.code)"
+                          class="flex-1 text-left"
+                        >
+                          <span class="font-medium">{{ language.name }}</span>
+                        </button>
+                        <!-- 试听按钮 -->
+                        <button
+                          type="button"
+                          @click.stop="playLanguageVoice(language.code)"
+                          class="w-5 h-5 flex items-center justify-center rounded-full bg-white border border-gray-300 hover:bg-indigo-50 hover:border-indigo-400 transition shadow-sm flex-shrink-0"
+                          :class="currentPlayingLanguage === language.code ? 'bg-indigo-100 border-indigo-500' : ''"
+                          title="试听"
+                        >
+                          <svg v-if="currentPlayingLanguage === language.code" class="w-2.5 h-2.5 text-indigo-600" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+                          </svg>
+                          <svg v-else class="w-2.5 h-2.5 text-gray-600" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M8 5v14l11-7z"/>
+                          </svg>
+                        </button>
+                      </div>
+                      <div class="text-[10px] opacity-70 mb-1">
+                        <template v-if="customVoiceMap[language.code]">
+                          {{ customVoiceMap[language.code].name }} · {{ customVoiceMap[language.code].gender === 'male' ? '男声' : customVoiceMap[language.code].gender === 'female' ? '女声' : '其他' }}
+                          <span class="text-indigo-600">（自定义）</span>
+                        </template>
+                        <template v-else>
+                          {{ language.voice }} · {{ language.gender }}
+                        </template>
+                      </div>
+                      <!-- 所有语言都显示选择音色按钮 -->
+                      <button
+                        type="button"
+                        @click.stop="openVoiceModalForLanguage(language.code)"
+                        :disabled="autoIsProcessing"
+                        class="w-full px-2 py-0.5 text-[10px] rounded border transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        :class="customVoiceMap[language.code] ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'"
+                      >
+                        {{ customVoiceMap[language.code] ? '更换音色' : '选择音色' }}
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    @click="openVoiceModal"
-                    :disabled="autoIsProcessing"
-                    class="px-2.5 py-2 rounded-lg border border-dashed border-indigo-300 bg-indigo-50 text-indigo-600 text-left text-xs hover:bg-indigo-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <span class="font-medium">更多音色</span>
-                    <span class="block text-[10px] opacity-70">自定义音色库</span>
-                  </button>
                 </div>
               </div>
 
@@ -715,6 +740,19 @@
               <button @click="startAutoTranslation" :disabled="autoIsProcessing || autoUploadedVideos.length === 0 || autoTargetLanguages.length === 0" :title="autoUploadedVideos.length === 0 ? '请先确认上传视频' : autoTargetLanguages.length === 0 ? '请至少选择一种目标语言' : ''" class="w-full py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed">
                 {{ autoIsProcessing ? '处理中...' : `提交 (消耗${autoTranslationPointCost}积分)` }}
               </button>
+
+              <!-- Test Version Toggle -->
+              <div class="mt-2 flex items-center justify-center">
+                <label class="flex items-center space-x-1.5 cursor-pointer">
+                  <input
+                    v-model="useTestVersion"
+                    type="checkbox"
+                    :disabled="autoIsProcessing"
+                    class="h-3 w-3 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span class="text-xs text-gray-600">启用测试版本</span>
+                </label>
+              </div>
             </div>
           </div>
         </aside>
@@ -750,35 +788,6 @@
                           {{ autoSelectedHistoryTask.status === 'failed' ? '视频生成失败' : '视频还在生成中' }}
                         </div>
                         <div class="text-xs text-gray-500 mt-1">{{ getAutoStatusText(autoSelectedHistoryTask.status, autoSelectedHistoryTask) }}</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- 配置信息显示 -->
-                  <div v-if="autoSelectedHistoryTask.result_video_url" class="mt-3 bg-gray-50 rounded-lg p-3 border border-gray-200">
-                    <div class="text-xs font-medium text-gray-700 mb-2">翻译配置</div>
-                    <div class="space-y-1.5 text-[11px]">
-                      <div class="flex justify-between">
-                        <span class="text-gray-500">音色：</span>
-                        <span class="text-gray-900 font-medium">{{ getVoiceName(autoSelectedHistoryTask.target_language, autoSelectedHistoryTask.custom_voice_id) }}</span>
-                      </div>
-                      <div v-if="autoSelectedHistoryTask.tags && autoSelectedHistoryTask.tags.length > 0" class="flex justify-between">
-                        <span class="text-gray-500">任务标签：</span>
-                        <div class="flex flex-wrap gap-1 justify-end">
-                          <span v-for="tag in autoSelectedHistoryTask.tags" :key="tag" class="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700">{{ tag }}</span>
-                        </div>
-                      </div>
-                      <div v-if="autoSelectedHistoryTask.subtitle_params" class="flex justify-between">
-                        <span class="text-gray-500">字体大小：</span>
-                        <span class="text-gray-900 font-medium">{{ autoSelectedHistoryTask.subtitle_params.font_size || 70 }}</span>
-                      </div>
-                      <div v-if="autoSelectedHistoryTask.subtitle_params" class="flex justify-between">
-                        <span class="text-gray-500">字幕位置：</span>
-                        <span class="text-gray-900 font-medium">{{ getAlignmentName(autoSelectedHistoryTask.subtitle_params.alignment) }}</span>
-                      </div>
-                      <div v-if="autoSelectedHistoryTask.subtitle_params && autoSelectedHistoryTask.subtitle_params.y" class="flex justify-between">
-                        <span class="text-gray-500">垂直位置：</span>
-                        <span class="text-gray-900 font-medium">{{ Math.round(autoSelectedHistoryTask.subtitle_params.y * 100) }}%</span>
                       </div>
                     </div>
                   </div>
@@ -1050,6 +1059,9 @@
                       <button @click.stop="startEditAutoTaskName({ id: item.taskId, original_filename: item.original_filename })" class="px-2 py-0.5 text-[10px] text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded transition" title="编辑名称">
                         编辑
                       </button>
+                      <a v-if="item.result_video_url || item.videoUrl" :href="item.result_video_url || item.videoUrl" download @click.stop class="px-2 py-0.5 text-[10px] text-green-600 bg-green-50 hover:bg-green-100 rounded transition" title="下载视频">
+                        下载
+                      </a>
                       <span class="px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0" :class="getAutoStatusClass(item.status, item)">{{ getAutoStatusText(item.status, item) }}</span>
                     </div>
                   </div>
@@ -1364,40 +1376,67 @@
 
     <!-- Voice List Modal -->
     <div v-if="showVoiceModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @click="closeVoiceModal">
-      <div class="bg-white rounded-lg shadow-xl w-[1200px] h-[600px] mx-4 overflow-hidden flex flex-col" @click.stop>
+      <div class="bg-white rounded-lg shadow-xl w-[1000px] max-h-[80vh] mx-4 overflow-hidden flex flex-col" @click.stop>
         <div class="p-4 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
-          <h2 class="text-lg font-semibold text-gray-900">音色列表</h2>
+          <div>
+            <h2 class="text-lg font-semibold text-gray-900">选择音色 - {{ getLanguageName(currentSelectingLanguage) }}</h2>
+            <p class="text-xs text-gray-500 mt-1">为该语言选择一个音色（默认TTS或自定义音色）</p>
+          </div>
           <button @click="closeVoiceModal" class="text-gray-400 hover:text-gray-600">
             <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
-        <div class="p-4 space-y-4 flex-shrink-0">
-          <!-- Filters -->
-          <div class="flex gap-4">
-            <div class="flex-1">
-              <label class="block text-sm font-medium text-gray-700 mb-1">语言筛选</label>
-              <select v-model="voiceFilterLanguage" @change="filterVoices" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600">
-                <option value="">全部语言</option>
-                <option v-for="lang in LANGUAGE_OPTIONS" :key="lang.code" :value="lang.code">{{ lang.name }}</option>
-              </select>
-            </div>
-            <div class="flex-1">
-              <label class="block text-sm font-medium text-gray-700 mb-1">性别筛选</label>
-              <select v-model="voiceFilterGender" @change="filterVoices" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600">
-                <option value="">全部性别</option>
-                <option value="male">男声</option>
-                <option value="female">女声</option>
-                <option value="other">其他</option>
-              </select>
+
+        <!-- Default TTS Voice Section -->
+        <div class="p-4 border-b border-gray-100 flex-shrink-0">
+          <h3 class="text-sm font-medium text-gray-700 mb-2">默认TTS音色</h3>
+          <div
+            @click="selectDefaultVoice"
+            class="p-3 rounded-lg border transition cursor-pointer"
+            :class="selectedVoice === null ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:border-indigo-300'"
+          >
+            <div class="flex justify-between items-start">
+              <div class="flex-1">
+                <div class="font-medium text-gray-900 text-sm">{{ getDefaultVoiceForLanguage(currentSelectingLanguage)?.voice || '默认音色' }}</div>
+                <div class="text-xs text-gray-500 mt-1">{{ getDefaultVoiceForLanguage(currentSelectingLanguage)?.gender || '默认' }}</div>
+              </div>
+              <div v-if="selectedVoice === null" class="text-indigo-600 flex-shrink-0 ml-2">
+                <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                </svg>
+              </div>
             </div>
           </div>
         </div>
+
+        <!-- Custom Voices Section -->
+        <div class="p-4 flex-shrink-0">
+          <div class="flex justify-between items-center mb-2">
+            <h3 class="text-sm font-medium text-gray-700">自定义音色（ElevenLabs）</h3>
+            <button
+              type="button"
+              @click="openAddVoiceModal"
+              class="px-3 py-1 bg-indigo-600 text-white rounded-md text-xs font-medium hover:bg-indigo-700 transition"
+            >
+              添加音色
+            </button>
+          </div>
+          <div class="flex gap-2 mb-2">
+            <select v-model="voiceFilterGender" @change="filterVoices" class="flex-1 px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-indigo-600">
+              <option value="">全部性别</option>
+              <option value="male">男声</option>
+              <option value="female">女声</option>
+              <option value="other">其他</option>
+            </select>
+          </div>
+        </div>
+
         <!-- Voice List -->
         <div class="flex-1 overflow-y-auto px-4 pb-4">
-          <div v-if="filteredVoices.length === 0" class="text-center py-8 text-gray-500 text-sm">暂无音色</div>
-          <div class="grid grid-cols-5 gap-3">
+          <div v-if="filteredVoices.length === 0" class="text-center py-8 text-gray-500 text-sm">暂无自定义音色，点击"添加音色"按钮添加</div>
+          <div class="grid grid-cols-4 gap-3">
             <div
               v-for="voice in filteredVoices"
               :key="voice.id"
@@ -1413,7 +1452,7 @@
                     </svg>
                   </div>
                 </div>
-                <div class="text-xs text-gray-500 mt-1">{{ getLanguageName(voice.language) }} · {{ voice.gender === 'male' ? '男声' : voice.gender === 'female' ? '女声' : '其他' }}</div>
+                <div class="text-xs text-gray-500 mt-1">{{ voice.gender === 'male' ? '男声' : voice.gender === 'female' ? '女声' : '其他' }}</div>
                 <div v-if="voice.description" class="text-xs text-gray-400 mt-1 line-clamp-2">{{ voice.description }}</div>
               </div>
               <!-- Play button -->
@@ -1438,31 +1477,22 @@
             </div>
           </div>
         </div>
-        <div class="p-4 border-t border-gray-200 flex justify-between items-center">
+
+        <div class="p-4 border-t border-gray-200 flex justify-end gap-2">
           <button
             type="button"
-            @click="openAddVoiceModal"
+            @click="closeVoiceModal"
+            class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-50 transition"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            @click="confirmVoiceSelection"
             class="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 transition"
           >
-            添加音色
+            确认
           </button>
-          <div class="flex gap-2">
-            <button
-              type="button"
-              @click="closeVoiceModal"
-              class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-50 transition"
-            >
-              取消
-            </button>
-            <button
-              type="button"
-              @click="confirmVoiceSelection"
-              :disabled="!selectedVoice"
-              class="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              确认
-            </button>
-          </div>
         </div>
       </div>
     </div>
@@ -1721,7 +1751,7 @@ const showVoiceModal = ref(false)
 const showAddVoiceModal = ref(false)
 const customVoices = ref([])
 const filteredVoices = ref([])
-const selectedVoice = ref(null)
+const selectedVoice = ref(null) // 保持单选，但可以多次选择不同音色
 const voiceFilterLanguage = ref('')
 const voiceFilterGender = ref('')
 const newVoice = ref({ name: '', voice_id: '', language: 'zh', gender: 'female', description: '' })
@@ -1774,25 +1804,57 @@ const handleLoginSubmit = async () => {
 }
 
 // Voice modal functions
-const openVoiceModal = async () => {
+const openVoiceModalForLanguage = async (languageCode) => {
+  currentSelectingLanguage.value = languageCode
   showVoiceModal.value = true
   await fetchCustomVoices()
+
+  // Filter voices for the selected language
+  voiceFilterLanguage.value = languageCode
   filterVoices()
+
+  // Pre-select current voice if exists
+  if (customVoiceMap.value[languageCode]) {
+    const currentVoice = customVoiceMap.value[languageCode]
+    if (currentVoice.isCustom) {
+      selectedVoice.value = customVoices.value.find(v => v.id === currentVoice.id) || null
+    } else {
+      selectedVoice.value = null // Default voice
+    }
+  } else {
+    selectedVoice.value = null // Default voice
+  }
 }
 
 const closeVoiceModal = () => {
-  // 停止音频播放
+  // Stop audio playback
   if (voicePreviewAudio.value) {
     voicePreviewAudio.value.pause()
     voicePreviewAudio.value = null
   }
   playingVoiceId.value = null
   showVoiceModal.value = false
+  currentSelectingLanguage.value = null
+  selectedVoice.value = null
+}
+
+const getDefaultVoiceForLanguage = (languageCode) => {
+  return LANGUAGE_OPTIONS.find(lang => lang.code === languageCode)
+}
+
+const selectDefaultVoice = () => {
+  selectedVoice.value = null
 }
 
 const openAddVoiceModal = () => {
   showAddVoiceModal.value = true
-  newVoice.value = { name: '', voice_id: '', language: 'zh', gender: 'female', description: '' }
+  newVoice.value = {
+    name: '',
+    voice_id: '',
+    language: currentSelectingLanguage.value || 'zh',
+    gender: 'female',
+    description: ''
+  }
 }
 
 const fetchCustomVoices = async () => {
@@ -1818,6 +1880,40 @@ const filterVoices = () => {
 
 const selectVoice = (voice) => {
   selectedVoice.value = voice
+}
+
+const confirmVoiceSelection = () => {
+  if (!currentSelectingLanguage.value) return
+
+  const languageCode = currentSelectingLanguage.value
+
+  if (selectedVoice.value === null) {
+    // User selected default voice - remove custom voice mapping
+    delete customVoiceMap.value[languageCode]
+  } else {
+    // User selected a custom voice - store single voice object
+    customVoiceMap.value[languageCode] = {
+      id: selectedVoice.value.id,
+      name: selectedVoice.value.name,
+      voice_id: selectedVoice.value.voice_id,
+      gender: selectedVoice.value.gender,
+      isCustom: true
+    }
+  }
+
+  // Save to localStorage for future use
+  try {
+    localStorage.setItem('customVoiceMap', JSON.stringify(customVoiceMap.value))
+  } catch (e) {
+    console.warn('Failed to save voice map to localStorage:', e)
+  }
+
+  // Ensure language is selected
+  if (!autoTargetLanguages.value.includes(languageCode)) {
+    autoTargetLanguages.value.push(languageCode)
+  }
+
+  closeVoiceModal()
 }
 
 const playVoicePreview = async (voice) => {
@@ -1892,26 +1988,14 @@ const generateAndPlayPreview = async (voice) => {
   }
 }
 
-const confirmVoiceSelection = () => {
-  if (selectedVoice.value) {
-    const languageCode = selectedVoice.value.language
+const removeCustomVoice = (languageCode) => {
+  delete customVoiceMap.value[languageCode]
 
-    // Save custom voice info to the map
-    customVoiceMap.value[languageCode] = {
-      id: selectedVoice.value.id,
-      name: selectedVoice.value.name,
-      voice_id: selectedVoice.value.voice_id,
-      gender: selectedVoice.value.gender,
-      isCustom: true
-    }
-
-    // Add language to selection if not already selected
-    const existingIndex = autoTargetLanguages.value.findIndex(lang => lang === languageCode)
-    if (existingIndex === -1) {
-      autoTargetLanguages.value.push(languageCode)
-    }
-
-    closeVoiceModal()
+  // Save to localStorage
+  try {
+    localStorage.setItem('customVoiceMap', JSON.stringify(customVoiceMap.value))
+  } catch (e) {
+    console.warn('Failed to save voice map to localStorage:', e)
   }
 }
 
@@ -1919,7 +2003,7 @@ const addVoice = async () => {
   if (!newVoice.value.name || !newVoice.value.voice_id) {
     return
   }
-  
+
   isAddingVoice.value = true
   try {
     const token = localStorage.getItem('token')
@@ -1929,7 +2013,13 @@ const addVoice = async () => {
     customVoices.value.push(response.data)
     filterVoices()
     showAddVoiceModal.value = false
-    newVoice.value = { name: '', voice_id: '', language: 'zh', gender: 'female', description: '' }
+    newVoice.value = {
+      name: '',
+      voice_id: '',
+      language: currentSelectingLanguage.value || 'zh',
+      gender: 'female',
+      description: ''
+    }
   } catch (error) {
     console.error('Failed to add voice:', error)
     alert('添加音色失败，请稍后重试')
@@ -2018,12 +2108,36 @@ const autoUploadedVideos = ref([])
 const autoUploadProgress = ref(0)
 const autoIsUploading = ref(false)
 const autoTargetLanguages = ref(['en'])
-const customVoiceMap = ref({}) // Map language code to custom voice info
+const customVoiceMap = ref({}) // Map language code to single voice object: { id, name, voice_id, gender, isCustom }
+const currentSelectingLanguage = ref(null) // Track which language is being selected for voice
+
+// Load saved voice preferences from localStorage
+try {
+  const savedVoiceMap = localStorage.getItem('customVoiceMap')
+  if (savedVoiceMap) {
+    customVoiceMap.value = JSON.parse(savedVoiceMap)
+  }
+} catch (e) {
+  console.warn('Failed to load saved voice map:', e)
+  customVoiceMap.value = {}
+}
 const autoSkipSubtitleErasure = ref(false)
+const autoFullScreenErase = ref(true)
 const autoContinuousDubbing = ref(false)
 const autoSubtitleStyleId = ref('default')
 const selectedAutoSubtitleStyle = computed(() => AUTO_SUBTITLE_STYLE_OPTIONS.find(style => style.id === autoSubtitleStyleId.value) || AUTO_SUBTITLE_STYLE_OPTIONS[0])
-const autoTranslationPointCost = computed(() => (10 + Math.max(0, autoTargetLanguages.value.length - 1) * 5) * Math.max(1, autoUploadedVideos.value.length))
+const autoTranslationPointCost = computed(() => {
+  const languagePoints = 10 + Math.max(0, autoTargetLanguages.value.length - 1) * 5
+
+  // 计算所有视频的总积分
+  const totalPoints = autoUploadedVideos.value.reduce((sum, video) => {
+    const duration = video.duration || 0
+    const timeUnits = Math.ceil(duration / 30) // 以30秒为一个单位
+    return sum + languagePoints * Math.max(1, timeUnits)
+  }, 0)
+
+  return Math.max(languagePoints, totalPoints) // 至少扣除一个语言的基础积分
+})
 const autoPendingVideoFiles = computed(() => autoVideoFiles.value.filter(file => !autoUploadedVideos.value.some(item => item.file === file)))
 const autoIsProcessing = ref(false)
 const autoProgress = ref({ step: 0, status: '' })
@@ -2041,8 +2155,9 @@ const editingAutoTaskName = ref('')
 const autoEditInput = ref(null)
 const autoTaskTags = ref([])
 const autoTagInput = ref('')
+const useTestVersion = ref(false)
 const autoSavedTags = ref([])
-const autoFontSize = ref(90)
+const autoFontSize = ref(60)
 const subtitleBottomPosition = ref(30)
 const showSubtitlePreview = ref(false)
 const videoMetadataLoaded = ref(0) // Counter to force computed recalculation
@@ -2337,7 +2452,7 @@ const toggleAutoTargetLanguage = (languageCode) => {
 // 语音试听功能
 let currentAudio = null
 
-const playHelloVoice = (languageCode) => {
+const playLanguageVoice = async (languageCode) => {
   // 如果正在播放同一个语言，停止播放
   if (currentPlayingLanguage.value === languageCode && currentAudio) {
     currentAudio.pause()
@@ -2352,26 +2467,71 @@ const playHelloVoice = (languageCode) => {
     currentAudio = null
   }
 
-  // 播放新的音频
-  const audioPath = `/hello_voices/hello_${languageCode}.mp3`
-  currentAudio = new Audio(audioPath)
   currentPlayingLanguage.value = languageCode
 
-  currentAudio.play().catch(err => {
-    console.error('播放失败:', err)
-    currentPlayingLanguage.value = null
-  })
+  // Check if custom voice is selected for this language
+  const customVoice = customVoiceMap.value[languageCode]
 
-  // 播放结束后重置状态
-  currentAudio.onended = () => {
-    currentPlayingLanguage.value = null
-    currentAudio = null
-  }
+  if (customVoice && customVoice.isCustom) {
+    // Play custom voice preview
+    try {
+      const audioUrl = `${API_BASE}/hello-voices/${customVoice.voice_id}.mp3`
+      currentAudio = new Audio(audioUrl)
 
-  // 播放出错时重置状态
-  currentAudio.onerror = () => {
-    currentPlayingLanguage.value = null
-    currentAudio = null
+      currentAudio.onended = () => {
+        currentPlayingLanguage.value = null
+        currentAudio = null
+      }
+
+      currentAudio.onerror = async () => {
+        // File not found, try to generate
+        try {
+          const response = await axios.post(`${API_BASE}/generate-voice-preview`, {
+            voice_id: customVoice.voice_id,
+            language: languageCode
+          })
+
+          if (response.data.status === 'success') {
+            const newAudioUrl = `${API_BASE}${response.data.audio_url}`
+            currentAudio = new Audio(newAudioUrl)
+            currentAudio.onended = () => {
+              currentPlayingLanguage.value = null
+              currentAudio = null
+            }
+            await currentAudio.play()
+          }
+        } catch (err) {
+          console.error('Failed to generate preview:', err)
+          currentPlayingLanguage.value = null
+          currentAudio = null
+        }
+      }
+
+      await currentAudio.play()
+    } catch (err) {
+      console.error('播放失败:', err)
+      currentPlayingLanguage.value = null
+      currentAudio = null
+    }
+  } else {
+    // Play default TTS voice
+    const audioPath = `/hello_voices/hello_${languageCode}.mp3`
+    currentAudio = new Audio(audioPath)
+
+    currentAudio.play().catch(err => {
+      console.error('播放失败:', err)
+      currentPlayingLanguage.value = null
+    })
+
+    currentAudio.onended = () => {
+      currentPlayingLanguage.value = null
+      currentAudio = null
+    }
+
+    currentAudio.onerror = () => {
+      currentPlayingLanguage.value = null
+      currentAudio = null
+    }
   }
 }
 
@@ -3138,16 +3298,16 @@ const handleAutoVideoSelect = async (e) => {
 
 const confirmAutoVideoUpload = async () => {
   if (autoPendingVideoFiles.value.length === 0) return
-  
+
   try {
     autoIsUploading.value = true
     autoUploadProgress.value = 0
-    
+
     // Initialize OSS client
     if (!ossClient) {
       await initOSSClient()
     }
-    
+
     const filesToUpload = [...autoPendingVideoFiles.value]
     const totalFiles = filesToUpload.length
     let completedFiles = 0
@@ -3158,7 +3318,10 @@ const confirmAutoVideoUpload = async () => {
       const randomStr = Math.random().toString(36).substring(2, 10)
       const ext = file.name.split('.').pop()
       const ossKey = `auto_translate/1/${timestamp}_${randomStr}.${ext}`
-      
+
+      // Get video duration
+      const duration = await getVideoDuration(file)
+
       // Upload video to OSS with progress tracking
       await ossClient.multipartUpload(ossKey, file, {
         progress: (p) => {
@@ -3168,7 +3331,7 @@ const confirmAutoVideoUpload = async () => {
         parallel: 5
       })
 
-      autoUploadedVideos.value.push({ file, ossKey })
+      autoUploadedVideos.value.push({ file, ossKey, duration })
       completedFiles++
       autoUploadProgress.value = Math.round(completedFiles / totalFiles * 100)
     }
@@ -3276,11 +3439,16 @@ const startAutoTranslation = async () => {
     for (const uploadedVideo of autoUploadedVideos.value) {
       const fileUrl = ossClient.signatureUrl(uploadedVideo.ossKey, { expires: 604800 })
 
-      // Build custom voice map for each language
+      // Build custom voice map: { language_code: voice_id }
+      // voice_id can be null (default TTS) or a custom voice ID
       const languageVoiceMap = {}
       for (const langCode of autoTargetLanguages.value) {
-        if (customVoiceMap.value[langCode]) {
-          languageVoiceMap[langCode] = customVoiceMap.value[langCode].id
+        if (customVoiceMap.value[langCode] && customVoiceMap.value[langCode].isCustom) {
+          // Custom voice selected
+          languageVoiceMap[langCode] = customVoiceMap.value[langCode].voice_id
+        } else {
+          // Default TTS voice (send null or omit)
+          languageVoiceMap[langCode] = null
         }
       }
 
@@ -3295,10 +3463,12 @@ const startAutoTranslation = async () => {
           file_url: fileUrl,
           original_video_url: fileUrl,
           skip_subtitle_erasure: autoSkipSubtitleErasure.value,
+          full_screen_erase: autoFullScreenErase.value,
           continuous_dubbing: autoContinuousDubbing.value,
           subtitle_params: buildAutoSubtitleParams(),
           tags: autoTaskTags.value,
-          custom_voice_map: languageVoiceMap
+          custom_voice_map: languageVoiceMap,
+          use_test_version: useTestVersion.value
         },
         {
           headers: {
@@ -3307,10 +3477,10 @@ const startAutoTranslation = async () => {
         }
       )
     }
-    
+
     // Show animation
     showSubmitAnimation.value = true
-    
+
     // Reset form immediately - task will be processed in background
     autoVideoFiles.value = []
     autoVideoThumbnail.value = ''
@@ -3320,12 +3490,14 @@ const startAutoTranslation = async () => {
     autoProgress.value = { step: 0, status: '' }
     autoUploadProgress.value = 0
     autoTargetLanguages.value = ['en']
-    customVoiceMap.value = {}
+    // 不清空 customVoiceMap，保留用户的音色选择
+    // customVoiceMap.value = {}
     autoSkipSubtitleErasure.value = false
+    autoFullScreenErase.value = true
     autoContinuousDubbing.value = false
     autoSubtitleStyleId.value = 'default'
     autoTaskTags.value = []
-    
+
     // Reload history to show the new task after animation
     setTimeout(async () => {
       await loadAutoTranslationHistory()
@@ -3407,6 +3579,23 @@ const pollEraseTaskCompletion = async (taskId) => {
   }
 
   throw new Error('字幕擦除超时')
+}
+
+// 获取视频时长的辅助函数
+const getVideoDuration = (file) => {
+  return new Promise((resolve) => {
+    const video = document.createElement('video')
+    video.preload = 'metadata'
+    video.onloadedmetadata = () => {
+      window.URL.revokeObjectURL(video.src)
+      resolve(video.duration || 0)
+    }
+    video.onerror = () => {
+      window.URL.revokeObjectURL(video.src)
+      resolve(0) // 如果获取失败，返回0
+    }
+    video.src = URL.createObjectURL(file)
+  })
 }
 
 const autoFilterTag = ref('')
@@ -3651,10 +3840,17 @@ const saveAutoTaskName = async () => {
       }
     )
 
+    // Update in autoTaskHistory
     const task = autoTaskHistory.value.find(t => t.id === editingAutoTaskId.value)
     if (task) {
       task.original_filename = editingAutoTaskName.value.trim()
     }
+
+    // Update in autoExpandedHistory (for immediate UI update)
+    const expandedItems = autoExpandedHistory.value.filter(item => item.taskId === editingAutoTaskId.value)
+    expandedItems.forEach(item => {
+      item.original_filename = editingAutoTaskName.value.trim()
+    })
 
     cancelEditAutoTaskName()
   } catch (error) {
@@ -3718,5 +3914,6 @@ const refreshAutoTranslationHistory = async () => {
 onMounted(() => {
   loadAutoTranslationHistory()
   fetchUserPoints()
+  fetchCustomVoices()
 })
 </script>

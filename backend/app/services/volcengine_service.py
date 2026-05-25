@@ -15,15 +15,34 @@ class VolcEngineService:
     async def submit_subtitle_erase_task(
         self,
         video_url: str,
-        mode: str = "Subtitle"
+        mode: str = "Subtitle",
+        erase_ratio_location: Optional[List[Dict[str, float]]] = None
     ) -> Dict[str, Any]:
-        """Submit a subtitle erase task to VolcEngine"""
+        """Submit a subtitle erase task to VolcEngine
+
+        Args:
+            video_url: Video URL to process
+            mode: Erase mode, "Subtitle" or "Text"
+            erase_ratio_location: List of text region coordinates in normalized format:
+                [
+                    {
+                        "top_left_x": 0.0,
+                        "top_left_y": 0.0,
+                        "bottom_right_x": 1.0,
+                        "bottom_right_y": 1.0
+                    },
+                    ...
+                ]
+        """
         url = f"{self.base_url}/erase-video-subtitle-pro"
         payload = {
             "video_url": video_url,
             "mode": mode
         }
-        
+
+        if erase_ratio_location:
+            payload["erase_ratio_location"] = erase_ratio_location
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(url, json=payload, headers=self.headers)
             response.raise_for_status()

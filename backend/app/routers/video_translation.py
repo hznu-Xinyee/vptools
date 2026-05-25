@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Header
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from datetime import datetime, date
 import logging
 import io
@@ -337,11 +337,13 @@ class AutoTranslationSubmitRequest(BaseModel):
     file_url: str
     original_video_url: Optional[str] = None
     skip_subtitle_erasure: bool = False
+    full_screen_erase: bool = True
     subtitle_params: Optional[SubtitleParams] = None
     tags: Optional[List[str]] = None
     custom_voice_id: Optional[int] = None
-    custom_voice_map: Optional[Dict[str, int]] = None  # Map language code to custom voice ID
+    custom_voice_map: Optional[Dict[str, Optional[str]]] = None  # Map language code to voice_id string (ElevenLabs voice_id or None for default)
     continuous_dubbing: bool = False
+    use_test_version: bool = False
 
 
 async def submit_auto_translation_to_fc_background(
@@ -352,10 +354,12 @@ async def submit_auto_translation_to_fc_background(
     target_language: Optional[str],
     target_languages: List[str],
     skip_subtitle_erasure: bool,
+    full_screen_erase: bool,
     subtitle_params: Optional[Dict[str, Any]],
     custom_voice_id: Optional[int] = None,
-    custom_voice_map: Optional[Dict[str, int]] = None,
-    continuous_dubbing: bool = False
+    custom_voice_map: Optional[Dict[str, Optional[str]]] = None,  # Map language code to voice_id string
+    continuous_dubbing: bool = False,
+    use_test_version: bool = False
 ):
     logger.info(f"[自动翻译] 任务 {task_id} 已进入 FC 提交队列，最多同时提交 10 个任务")
     async with fc_submit_semaphore:
@@ -374,9 +378,9 @@ async def submit_auto_translation_to_fc_background(
             custom_voice_voice_id = None
             if custom_voice_id:
                 from app.models.custom_voice import CustomVoice
+                # Remove user_id filter to allow shared custom voices across all users
                 custom_voice = db.query(CustomVoice).filter(
                     CustomVoice.id == custom_voice_id,
-                    CustomVoice.user_id == task.user_id,
                     CustomVoice.is_active == True
                 ).first()
                 if custom_voice:
@@ -384,22 +388,20 @@ async def submit_auto_translation_to_fc_background(
                     task.custom_voice_id = custom_voice_id
 
             # Build custom_voice_voice_id_map from custom_voice_map
+            # custom_voice_map now contains voice_id strings directly (not database IDs)
             custom_voice_voice_id_map = None
             if custom_voice_map:
-                from app.models.custom_voice import CustomVoice
                 custom_voice_voice_id_map = {}
                 logger.info(f"[自动翻译] 收到 custom_voice_map: {custom_voice_map}")
                 for lang_code, voice_id in custom_voice_map.items():
-                    custom_voice = db.query(CustomVoice).filter(
-                        CustomVoice.id == voice_id,
-                        CustomVoice.user_id == task.user_id,
-                        CustomVoice.is_active == True
-                    ).first()
-                    if custom_voice:
-                        custom_voice_voice_id_map[lang_code] = custom_voice.voice_id
-                        logger.info(f"[自动翻译] {lang_code} 映射到 voice_id: {custom_voice.voice_id}")
+                    # voice_id is now the ElevenLabs voice_id string (or None for default TTS)
+                    if voice_id:
+                        custom_voice_voice_id_map[lang_code] = voice_id
+                        logger.info(f"[自动翻译] {lang_code} 使用自定义音色: {voice_id}")
                     else:
-                        logger.warning(f"[自动翻译] {lang_code} 的自定义音色 ID {voice_id} 未找到或不可用")
+                        # None means use default TTS for this language
+                        custom_voice_voice_id_map[lang_code] = None
+                        logger.info(f"[自动翻译] {lang_code} 使用默认TTS")
                 logger.info(f"[自动翻译] 最终 custom_voice_voice_id_map: {custom_voice_voice_id_map}")
 
 
@@ -416,8 +418,10 @@ async def submit_auto_translation_to_fc_background(
                 custom_voice_id=custom_voice_voice_id,
                 custom_voice_id_map=custom_voice_voice_id_map,
                 skip_subtitle_erasure=skip_subtitle_erasure,
+                full_screen_erase=full_screen_erase,
                 subtitle_params=subtitle_params,
-                continuous_dubbing=continuous_dubbing
+                continuous_dubbing=continuous_dubbing,
+                use_test_version=use_test_version
             )
             logger.info(f"[自动翻译] 任务 {task_id} 已提交到 FC 服务，响应: {fc_response}")
             
@@ -427,6 +431,7 @@ async def submit_auto_translation_to_fc_background(
                 db.commit()
         except Exception as submit_error:
             logger.error(f"[自动翻译] 任务 {task_id} 提交到 FC 服务失败: {str(submit_error)}", exc_info=True)
+            db.rollback()
             try:
                 task = db.query(VideoTranslationTask).filter(VideoTranslationTask.id == task_id).first()
                 if task:
@@ -497,10 +502,12 @@ async def submit_auto_translation(
             request.target_language,
             target_languages,
             request.skip_subtitle_erasure,
+            request.full_screen_erase,
             subtitle_params,
             request.custom_voice_id,
             request.custom_voice_map,
-            request.continuous_dubbing
+            request.continuous_dubbing,
+            request.use_test_version
         ))
 
         return {
