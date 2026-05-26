@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, Enum as SQLEnum, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, Enum as SQLEnum, Boolean, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.core.database import Base
@@ -45,3 +45,8 @@ class VideoTranslationTask(Base):
     completed_at = Column(DateTime, nullable=True)
 
     user = relationship("User", back_populates="video_translation_tasks")
+    tag_links = relationship(
+        "VideoTranslationTaskTag",
+        back_populates="task",
+        cascade="all, delete-orphan",
+    )
