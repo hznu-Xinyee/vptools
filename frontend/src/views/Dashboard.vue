@@ -1,6 +1,31 @@
 <template>
   <div class="min-h-screen bg-white w-screen h-screen overflow-hidden relative">
 
+    <!-- Mobile Header -->
+    <MobileHeader
+      v-if="!isDesktop"
+      :title="getFeatureTitle()"
+      @toggle-menu="layoutStore.toggleMobileMenu"
+      @toggle-config="layoutStore.toggleConfigSidebar"
+    />
+
+    <!-- Mobile Navigation Drawer -->
+    <MobileDrawer
+      :is-open="layoutStore.isMobileMenuOpen"
+      title="导航"
+      position="left"
+      width="narrow"
+      @close="layoutStore.closeAllSidebars"
+    >
+      <div class="space-y-1.5">
+        <button @click="navigateToFeature('auto-video-translate'); layoutStore.closeAllSidebars()" :class="['w-full text-left px-3 py-2 rounded-md text-sm', currentFeature === 'auto-video-translate' ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-gray-100']">视频翻译（自动版）</button>
+        <button @click="navigateToFeature('subtitle-erase'); layoutStore.closeAllSidebars()" :class="['w-full text-left px-3 py-2 rounded-md text-sm', currentFeature === 'subtitle-erase' ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-gray-100']">字幕擦除</button>
+        <button @click="navigateToFeature('subtitle-extract'); layoutStore.closeAllSidebars()" :class="['w-full text-left px-3 py-2 rounded-md text-sm', currentFeature === 'subtitle-extract' ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-gray-100']">字幕提取</button>
+        <button @click="navigateToFeature('subtitle-embed'); layoutStore.closeAllSidebars()" :class="['w-full text-left px-3 py-2 rounded-md text-sm', currentFeature === 'subtitle-embed' ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-gray-100']">视频翻译（手动）</button>
+        <button @click="navigateToFeature('image-translate'); layoutStore.closeAllSidebars()" :class="['w-full text-left px-3 py-2 rounded-md text-sm', currentFeature === 'image-translate' ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-gray-100']">图片翻译</button>
+      </div>
+    </MobileDrawer>
+
     <!-- Floating User Info Card (Bottom Left) -->
     <div class="fixed bottom-4 left-4 z-50">
       <!-- Collapsed Circle -->
@@ -52,11 +77,11 @@
     </div>
 
     <!-- Main Content full-viewport -->
-    <main class="w-screen h-screen">
+    <main :class="['w-screen h-screen', !isDesktop ? 'pt-14' : '']">
       <!-- Subtitle Erase Feature (Four-column) -->
       <div v-if="currentFeature === 'subtitle-erase'" class="flex min-h-screen">
         <!-- Far Left Wider Nav -->
-        <aside class="hidden lg:flex w-44 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-1.5">
+        <aside v-if="isDesktop" class="w-44 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-1.5 flex">
           <div class="text-xs text-gray-500 px-1 mb-1">导航</div>
           <button @click="navigateToFeature('auto-video-translate')" class="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-gray-100">视频翻译（自动版）</button>
           <button @click="navigateToFeature('subtitle-erase')" class="w-full text-left px-3 py-2 rounded-md text-sm bg-indigo-100 text-indigo-700">字幕擦除</button>
@@ -66,7 +91,7 @@
         </aside>
 
         <!-- Left Process Config Column -->
-        <aside class="hidden lg:flex w-72 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-3">
+        <aside v-if="isDesktop" class="w-72 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-3 flex">
           <div class="bg-white rounded-xl border border-gray-200 shadow-sm">
             <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <h3 class="text-sm font-medium text-gray-900">已选择的处理方式</h3>
@@ -96,7 +121,7 @@
         </section>
 
         <!-- Right Sidebar: Upload + History -->
-        <aside class="w-full lg:w-80 border-l border-gray-200 bg-gray-50 p-3 space-y-3">
+        <aside :class="['border-l border-gray-200 bg-gray-50 p-3 space-y-3', isDesktop ? 'w-80' : 'w-full']">
           <!-- Upload Card -->
           <div class="bg-white rounded-xl border border-gray-200 shadow-sm">
             <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
@@ -173,7 +198,7 @@
       <!-- Subtitle Extract Feature (Four-column) -->
       <div v-else-if="currentFeature === 'subtitle-extract'" class="flex min-h-screen">
         <!-- Far Left Wider Nav -->
-        <aside class="hidden lg:flex w-44 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-1.5">
+        <aside v-if="isDesktop" class="w-44 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-1.5 flex">
           <div class="text-xs text-gray-500 px-1 mb-1">导航</div>
           <button @click="navigateToFeature('auto-video-translate')" class="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-gray-100">视频翻译（自动版）</button>
           <button @click="navigateToFeature('subtitle-erase')" class="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-gray-100">字幕擦除</button>
@@ -183,7 +208,7 @@
         </aside>
 
         <!-- Left Process Config Column -->
-        <aside class="hidden lg:flex w-72 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-3">
+        <aside v-if="isDesktop" class="w-72 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-3 flex">
           <div class="bg-white rounded-xl border border-gray-200 shadow-sm">
             <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <h3 class="text-sm font-medium text-gray-900">已选择的处理方式</h3>
@@ -306,7 +331,7 @@
       <!-- Video Translation Feature (Four-column) -->
       <div v-else-if="currentFeature === 'subtitle-embed'" class="flex min-h-screen">
         <!-- Far Left Wider Nav -->
-        <aside class="hidden lg:flex w-44 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-1.5">
+        <aside v-if="isDesktop" class="w-44 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-1.5 flex">
           <div class="text-xs text-gray-500 px-1 mb-1">导航</div>
           <button @click="navigateToFeature('auto-video-translate')" class="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-gray-100">视频翻译（自动版）</button>
           <button @click="navigateToFeature('subtitle-erase')" class="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-gray-100">字幕擦除</button>
@@ -316,7 +341,7 @@
         </aside>
 
         <!-- Left Process Config Column -->
-        <aside class="hidden lg:flex w-72 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-3">
+        <aside v-if="isDesktop" class="w-72 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-3 flex">
           <div class="bg-white rounded-xl border border-gray-200 shadow-sm">
             <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <h3 class="text-sm font-medium text-gray-900">已选择的处理方式</h3>
@@ -473,7 +498,7 @@
       <!-- Automatic Video Translation Feature -->
       <div v-else-if="currentFeature === 'auto-video-translate'" class="flex min-h-screen">
         <!-- Far Left Wider Nav -->
-        <aside class="hidden lg:flex w-44 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-1.5">
+        <aside v-if="isDesktop" class="w-44 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-1.5 flex">
           <div class="text-xs text-gray-500 px-1 mb-1">导航</div>
           <button @click="navigateToFeature('auto-video-translate')" class="w-full text-left px-3 py-2 rounded-md text-sm transition-colors"
                   :class="currentFeature === 'auto-video-translate' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700 hover:bg-gray-100'">视频翻译（自动版）</button>
@@ -484,7 +509,7 @@
         </aside>
 
         <!-- Left Process Config Column -->
-        <aside class="hidden lg:flex w-96 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-3 overflow-y-auto max-h-screen">
+        <aside v-if="isDesktop" class="w-96 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-3 overflow-y-auto max-h-screen flex">
           <div class="bg-white rounded-xl border border-gray-200 shadow-sm">
             <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <h3 class="text-sm font-medium text-gray-900">已选择的处理方式</h3>
@@ -775,37 +800,29 @@
           <div class="w-full h-full flex flex-col items-center justify-start p-6 pt-20">
             <div class="relative">
               <!-- Two videos side by side when viewing history -->
-              <div v-if="autoSelectedHistoryTask" class="flex gap-6 items-start justify-center w-full">
-                <div class="w-[32vw] max-w-[460px]">
-                  <div class="text-xs text-gray-500 mb-1 text-center">原视频</div>
-                  <div class="w-full max-h-[50vh] flex items-center justify-center">
-                    <video v-if="autoSelectedHistoryTask.original_video_url" :src="autoSelectedHistoryTask.original_video_url" controls class="max-w-full max-h-[50vh] rounded-lg shadow"></video>
-                    <div v-else class="w-full h-[32vh] max-h-[360px] flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
-                      <div class="text-center">
-                        <div class="text-gray-400 text-sm mb-1">无原视频链接</div>
-                        <div class="text-gray-400 text-xs">原视频未保存</div>
-                      </div>
+              <ResponsiveVideoContainer
+                v-if="autoSelectedHistoryTask"
+                show-comparison
+                :original-video-url="autoSelectedHistoryTask.original_video_url"
+                :translated-video-url="autoSelectedHistoryTask.result_video_url"
+                original-label="原视频"
+                :translated-label="getSelectedTaskLanguageName(autoSelectedHistoryTask)"
+              >
+                <template #original-placeholder>
+                  <div class="text-center">
+                    <div class="text-gray-400 text-sm mb-1">无原视频链接</div>
+                    <div class="text-gray-400 text-xs">原视频未保存</div>
+                  </div>
+                </template>
+                <template #translated-placeholder>
+                  <div class="text-center">
+                    <div class="text-sm" :class="autoSelectedHistoryTask.status === 'failed' ? 'text-red-600' : 'text-indigo-600'">
+                      {{ autoSelectedHistoryTask.status === 'failed' ? '视频生成失败' : '视频还在生成中' }}
                     </div>
+                    <div class="text-xs text-gray-500 mt-1">{{ getAutoStatusText(autoSelectedHistoryTask.status, autoSelectedHistoryTask) }}</div>
                   </div>
-                </div>
-                <div class="w-px h-[46vh] bg-gray-300"></div>
-                <div class="w-[32vw] max-w-[460px]">
-                  <div class="text-xs text-gray-500 mb-1 text-center">
-                    {{ getSelectedTaskLanguageName(autoSelectedHistoryTask) }}
-                  </div>
-                  <div class="w-full max-h-[50vh] flex items-center justify-center">
-                    <video v-if="autoSelectedHistoryTask.result_video_url" :src="autoSelectedHistoryTask.result_video_url" controls class="max-w-full max-h-[50vh] rounded-lg shadow"></video>
-                    <div v-else class="w-full h-[32vh] max-h-[360px] flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
-                      <div class="text-center">
-                        <div class="text-sm" :class="autoSelectedHistoryTask.status === 'failed' ? 'text-red-600' : 'text-indigo-600'">
-                          {{ autoSelectedHistoryTask.status === 'failed' ? '视频生成失败' : '视频还在生成中' }}
-                        </div>
-                        <div class="text-xs text-gray-500 mt-1">{{ getAutoStatusText(autoSelectedHistoryTask.status, autoSelectedHistoryTask) }}</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                </template>
+              </ResponsiveVideoContainer>
               <!-- Single video for uploaded video preview with subtitle overlay -->
               <div v-else-if="autoVideoObjectUrl" class="inline-block">
                 <!-- 9:16 固定比例容器 -->
@@ -1055,10 +1072,10 @@
                   <button
                     type="button"
                     @click="downloadSelectedAutoHistory"
-                    :disabled="autoDownloadableSelectedHistoryItems.length === 0"
+                    :disabled="autoDownloadableSelectedHistoryItems.length === 0 || autoIsDownloadingSelected"
                     class="px-2.5 py-1 rounded-md bg-green-50 text-[11px] font-medium text-green-700 transition hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    下载选中<span v-if="autoDownloadableSelectedHistoryItems.length > 0">({{ autoDownloadableSelectedHistoryItems.length }})</span>
+                    {{ autoIsDownloadingSelected ? '打包中...' : '下载选中' }}<span v-if="autoDownloadableSelectedHistoryItems.length > 0 && !autoIsDownloadingSelected">({{ autoDownloadableSelectedHistoryItems.length }})</span>
                   </button>
                 </div>
               </div>
@@ -1141,7 +1158,7 @@
       <!-- Image Translate Feature (Four-column) -->
       <div v-else-if="currentFeature === 'image-translate'" class="flex min-h-screen">
         <!-- Far Left Wider Nav -->
-        <aside class="hidden lg:flex w-44 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-1.5">
+        <aside v-if="isDesktop" class="w-44 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-1.5 flex">
           <div class="text-xs text-gray-500 px-1 mb-1">导航</div>
           <button @click="navigateToFeature('auto-video-translate')" class="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-gray-100">视频翻译（自动版）</button>
           <button @click="navigateToFeature('subtitle-erase')" class="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-gray-100">字幕擦除</button>
@@ -1151,7 +1168,7 @@
         </aside>
 
         <!-- Left Process Config Column -->
-        <aside class="hidden lg:flex w-72 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-3">
+        <aside v-if="isDesktop" class="w-72 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-3 flex">
           <div class="bg-white rounded-xl border border-gray-200 shadow-sm">
             <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <h3 class="text-sm font-medium text-gray-900">已选择的处理方式</h3>
@@ -1611,10 +1628,17 @@ import { useRouter } from 'vue-router'
 import axios from 'axios'
 import OSS from 'ali-oss'
 import { useAuthStore } from '@/stores/auth'
+import { useLayoutStore } from '@/stores/layout'
+import { useBreakpoint } from '@/composables/useBreakpoint'
 import { UploadFilled } from '@element-plus/icons-vue'
+import MobileHeader from '@/components/MobileHeader.vue'
+import MobileDrawer from '@/components/MobileDrawer.vue'
+import ResponsiveVideoContainer from '@/components/ResponsiveVideoContainer.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const layoutStore = useLayoutStore()
+const { isMobile, isTablet, isDesktop } = useBreakpoint()
 
 const LANGUAGE_OPTIONS = [
   { code: 'zh', name: '中文', voice: 'xiaoyun', gender: '女声' },
@@ -2169,7 +2193,7 @@ try {
   customVoiceMap.value = {}
 }
 const autoSkipSubtitleErasure = ref(false)
-const autoFullScreenErase = ref(true)
+const autoFullScreenErase = ref(false)
 const autoHideSubtitles = ref(false)
 const autoContinuousDubbing = ref(false)
 const autoSubtitleStyleId = ref('default')
@@ -2195,6 +2219,7 @@ const autoCurrentPage = ref(1)
 const autoTotalPages = ref(1)
 const autoPageSize = ref(8)
 const autoIsRefreshing = ref(false)
+const autoIsDownloadingSelected = ref(false)
 const showSubmitAnimation = ref(false)
 const showSubmitSuccessCard = ref(false)
 const showAutoSubtitleStyleModal = ref(false)
@@ -2396,7 +2421,8 @@ const initOSSClient = async () => {
       region: config.region,
       accessKeyId: config.accessKeyId,
       accessKeySecret: config.accessKeySecret,
-      bucket: config.bucket
+      bucket: config.bucket,
+      secure: true
     })
     return ossClient
   } catch (error) {
@@ -3698,19 +3724,172 @@ const getAutoHistoryDownloadName = (item) => {
   return `${baseName}_${languageName}.${extension}`
 }
 
-const downloadSelectedAutoHistory = () => {
-  autoDownloadableSelectedHistoryItems.value.forEach(item => {
-    const videoUrl = item.result_video_url || item.videoUrl
-    if (!videoUrl) return
+const triggerBrowserDownload = (url, filename) => {
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.style.display = 'none'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
 
-    const link = document.createElement('a')
-    link.href = videoUrl
-    link.download = getAutoHistoryDownloadName(item)
-    link.style.display = 'none'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  })
+const getAutoHistoryArchiveDownloadName = () => {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '').slice(0, 15)
+  return `selected-translations_${timestamp}.zip`
+}
+
+const getDownloadErrorMessage = async (error) => {
+  const data = error.response?.data
+  if (data instanceof Blob) {
+    try {
+      const text = await data.text()
+      const parsed = JSON.parse(text)
+      return parsed.detail || error.message
+    } catch (parseError) {
+      return error.message
+    }
+  }
+  return data?.detail || error.message
+}
+
+const downloadSelectedAutoHistory = async () => {
+  if (autoIsDownloadingSelected.value) return
+
+  const items = autoDownloadableSelectedHistoryItems.value
+  if (items.length === 0) {
+    alert('请先选择要下载的视频')
+    return
+  }
+
+  // 首次批量下载时，提示用户允许多文件下载
+  const isFirstTime = !localStorage.getItem('batch_download_tip_shown')
+  if (isFirstTime && items.length > 1) {
+    const userConfirm = confirm(
+      `即将下载 ${items.length} 个视频文件\n\n` +
+      '提示：浏览器可能会询问是否允许下载多个文件，请点击"允许"\n\n' +
+      '点击"确定"开始下载'
+    )
+    if (!userConfirm) return
+    localStorage.setItem('batch_download_tip_shown', 'true')
+  }
+
+  autoIsDownloadingSelected.value = true
+
+  try {
+    const totalCount = items.length
+    let downloadedCount = 0
+    let skippedCount = 0
+
+    // 创建进度提示浮窗
+    const progressDiv = document.createElement('div')
+    progressDiv.id = 'batch-download-progress'
+    progressDiv.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: white;
+      padding: 16px 24px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+      z-index: 9999;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-width: 280px;
+      border: 1px solid #e5e7eb;
+    `
+    progressDiv.innerHTML = `
+      <div style="display: flex; align-items: center; margin-bottom: 12px;">
+        <div style="width: 32px; height: 32px; border: 3px solid #e5e7eb; border-top-color: #4f46e5; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 12px;"></div>
+        <div style="font-weight: 600; font-size: 15px; color: #111827;">批量下载进行中</div>
+      </div>
+      <div id="download-progress" style="font-size: 14px; color: #6b7280; margin-bottom: 4px;">正在下载: 0/${totalCount}</div>
+      <div style="font-size: 12px; color: #9ca3af;">请稍候，每个文件间隔约1秒...</div>
+    `
+
+    // 添加旋转动画
+    const style = document.createElement('style')
+    style.textContent = `
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    `
+    document.head.appendChild(style)
+    document.body.appendChild(progressDiv)
+
+    // 逐个下载文件
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]
+      const url = item.result_video_url || item.videoUrl
+
+      if (!url) {
+        console.warn(`跳过无效项: ${item.original_filename}`)
+        skippedCount++
+        continue
+      }
+
+      // 使用隐藏 iframe 触发下载
+      const iframe = document.createElement('iframe')
+      iframe.style.cssText = 'display:none;position:fixed;width:1px;height:1px;top:-100px;left:-100px;'
+      iframe.src = url
+      document.body.appendChild(iframe)
+
+      // 更新进度
+      downloadedCount++
+      const progressEl = document.getElementById('download-progress')
+      if (progressEl) {
+        progressEl.textContent = `正在下载: ${downloadedCount}/${totalCount}${skippedCount > 0 ? ` (跳过${skippedCount}个)` : ''}`
+      }
+
+      // 5秒后移除 iframe
+      setTimeout(() => {
+        if (iframe.parentNode) {
+          document.body.removeChild(iframe)
+        }
+      }, 5000)
+
+      // 添加延迟避免浏览器拦截（除了最后一个文件）
+      if (i < items.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      }
+    }
+
+    // 下载完成提示
+    setTimeout(() => {
+      const progressDiv = document.getElementById('batch-download-progress')
+      if (progressDiv) {
+        progressDiv.innerHTML = `
+          <div style="display: flex; align-items: center; margin-bottom: 12px;">
+            <div style="width: 32px; height: 32px; background: #10b981; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 12px;">
+              <svg style="width: 20px; height: 20px; color: white;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+              </svg>
+            </div>
+            <div style="font-weight: 600; font-size: 15px; color: #10b981;">下载完成</div>
+          </div>
+          <div style="font-size: 14px; color: #6b7280; margin-bottom: 4px;">已触发 ${downloadedCount} 个文件下载${skippedCount > 0 ? `，跳过 ${skippedCount} 个` : ''}</div>
+          <div style="font-size: 12px; color: #9ca3af;">请在浏览器下载管理器中查看</div>
+        `
+        setTimeout(() => {
+          if (progressDiv.parentNode) {
+            document.body.removeChild(progressDiv)
+          }
+        }, 3000)
+      }
+    }, 500)
+
+  } catch (error) {
+    console.error('批量下载失败:', error)
+    alert('下载失败: ' + error.message)
+
+    // 移除进度提示
+    const progressDiv = document.getElementById('batch-download-progress')
+    if (progressDiv && progressDiv.parentNode) {
+      document.body.removeChild(progressDiv)
+    }
+  } finally {
+    autoIsDownloadingSelected.value = false
+  }
 }
 
 const generateHistoryVideoThumbnail = (item) => {
@@ -3766,7 +3945,7 @@ const loadAutoTranslationHistory = async () => {
     const params = {
       is_auto: true,
       page: 1,
-      page_size: 100
+      page_size: 1000  // Increased from 100 to 1000 to load more history
     }
     const response = await axios.get(
       `${API_BASE}/video-translation/tasks`,
@@ -3777,19 +3956,19 @@ const loadAutoTranslationHistory = async () => {
         }
       }
     )
-    
+
     // Extract all unique tags from history
     const allTags = new Set()
     const expandedItems = []
-    
+
     response.data.items.forEach(task => {
       if (task.tags && Array.isArray(task.tags)) {
         task.tags.forEach(tag => allTags.add(tag))
       }
-      
+
       // Expand task into individual language video items
       const taskHasResults = task.language_results && typeof task.language_results === 'object' && Object.keys(task.language_results).length > 0
-      
+
       if (taskHasResults) {
         Object.entries(task.language_results).forEach(([langCode, result]) => {
           expandedItems.push({
@@ -3827,22 +4006,22 @@ const loadAutoTranslationHistory = async () => {
         })
       }
     })
-    
+
     autoAvailableTags.value = Array.from(allTags)
-    
+
     // Filter by tag and language
     let filteredItems = expandedItems
     if (autoFilterTag.value) {
-      filteredItems = filteredItems.filter(item => 
+      filteredItems = filteredItems.filter(item =>
         item.tags && item.tags.includes(autoFilterTag.value)
       )
     }
     if (autoFilterLanguage.value) {
-      filteredItems = filteredItems.filter(item => 
+      filteredItems = filteredItems.filter(item =>
         item.languageCode === autoFilterLanguage.value
       )
     }
-    
+
     // Pagination for expanded items
     const startIndex = (autoCurrentPage.value - 1) * autoPageSize.value
     const endIndex = startIndex + autoPageSize.value

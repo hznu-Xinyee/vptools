@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Header
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Any, Dict, List, Optional, Union
@@ -7,6 +8,12 @@ import logging
 import io
 import json
 import asyncio
+import os
+import re
+import tempfile
+import zipfile
+from urllib.parse import unquote, urlparse
+import requests
 
 from app.core.database import get_db
 from app.core.security import get_current_user
@@ -48,6 +55,16 @@ class FcCallbackRequest(BaseModel):
     language_results: Optional[Dict[str, Any]] = None
     result_video_url: Optional[str] = None
     error_message: Optional[str] = None
+
+
+class DownloadSelectionItem(BaseModel):
+    task_id: int
+    language_code: Optional[str] = None
+    filename: Optional[str] = None
+
+
+class DownloadSelectedRequest(BaseModel):
+    items: List[DownloadSelectionItem]
 
 
 logger = logging.getLogger(__name__)
@@ -122,6 +139,49 @@ def _model_dump_exclude_none(model: BaseModel) -> Dict[str, Any]:
     if hasattr(model, "model_dump"):
         return model.model_dump(exclude_none=True)
     return model.dict(exclude_none=True)
+
+
+def _safe_download_filename(filename: Optional[str], fallback: str) -> str:
+    raw_name = os.path.basename((filename or fallback).strip()) or fallback
+    safe_name = re.sub(r'[\\/:*?"<>|\r\n]+', "_", raw_name).strip(" .")
+    return safe_name or fallback
+
+
+def _get_download_extension(url: Optional[str]) -> str:
+    if not url:
+        return "mp4"
+    path = unquote(urlparse(url).path)
+    extension = os.path.splitext(path)[1].lstrip(".").lower()
+    if re.fullmatch(r"[a-z0-9]{2,5}", extension):
+        return extension
+    return "mp4"
+
+
+def _build_video_translation_download_filename(
+    task: VideoTranslationTask,
+    language_code: Optional[str],
+    result_url: str,
+    requested_filename: Optional[str]
+) -> str:
+    extension = _get_download_extension(result_url)
+    base_name = os.path.splitext(task.original_filename or f"task_{task.id}")[0]
+    language_suffix = language_code or task.target_language or "translation"
+    fallback = f"{base_name}_{language_suffix}.{extension}"
+    filename = _safe_download_filename(requested_filename, fallback)
+    if not os.path.splitext(filename)[1]:
+        filename = f"{filename}.{extension}"
+    return filename
+
+
+def _unique_zip_filename(filename: str, used_names: set[str]) -> str:
+    base_name, extension = os.path.splitext(filename)
+    candidate = filename
+    index = 2
+    while candidate in used_names:
+        candidate = f"{base_name}_{index}{extension}"
+        index += 1
+    used_names.add(candidate)
+    return candidate
 
 
 def _set_task_language_results(task: VideoTranslationTask, language_results: Dict[str, Any]) -> None:
@@ -646,6 +706,101 @@ async def get_video_translation_tasks(
         "page_size": page_size,
         "total_pages": (total + page_size - 1) // page_size
     }
+
+
+@router.post("/tasks/download-selected")
+def download_selected_video_translation_tasks(
+    request: DownloadSelectedRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if not request.items:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请选择要下载的视频")
+
+    task_ids = list(dict.fromkeys(item.task_id for item in request.items))
+    tasks = db.query(VideoTranslationTask).filter(
+        VideoTranslationTask.id.in_(task_ids),
+        VideoTranslationTask.user_id == current_user.id
+    ).all()
+    task_map = {task.id: task for task in tasks}
+
+    if len(task_map) != len(task_ids):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="部分任务不存在")
+
+    archive_buffer = tempfile.SpooledTemporaryFile(max_size=64 * 1024 * 1024)
+    used_names = set()
+    added_files = 0
+
+    try:
+        with zipfile.ZipFile(archive_buffer, mode="w", compression=zipfile.ZIP_STORED, allowZip64=True) as archive:
+            for selected_item in request.items:
+                task = task_map.get(selected_item.task_id)
+                if not task:
+                    continue
+
+                language_results = _get_task_language_results(task)
+                result_url = None
+
+                if selected_item.language_code:
+                    language_result = language_results.get(selected_item.language_code)
+                    if isinstance(language_result, dict):
+                        result_url = language_result.get("result_video_url")
+
+                if not result_url:
+                    result_url = task.result_video_url
+
+                if not result_url:
+                    continue
+
+                zip_filename = _unique_zip_filename(
+                    _build_video_translation_download_filename(
+                        task,
+                        selected_item.language_code,
+                        result_url,
+                        selected_item.filename
+                    ),
+                    used_names
+                )
+
+                with requests.get(result_url, stream=True, timeout=(10, 300), allow_redirects=True) as response:
+                    response.raise_for_status()
+                    with archive.open(zip_filename, "w") as archive_entry:
+                        for chunk in response.iter_content(chunk_size=1024 * 1024):
+                            if chunk:
+                                archive_entry.write(chunk)
+                added_files += 1
+
+        if added_files == 0:
+            archive_buffer.close()
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="没有可下载的视频")
+
+        archive_buffer.seek(0)
+    except HTTPException:
+        raise
+    except requests.RequestException as e:
+        archive_buffer.close()
+        logger.error("Download selected video translation failed: %s", str(e), exc_info=True)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="下载视频文件失败，请稍后重试")
+    except Exception as e:
+        archive_buffer.close()
+        logger.error("Create selected video translation zip failed: %s", str(e), exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="打包下载失败")
+
+    def iter_archive():
+        try:
+            while True:
+                chunk = archive_buffer.read(1024 * 1024)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            archive_buffer.close()
+
+    return StreamingResponse(
+        iter_archive(),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="selected-translations.zip"'}
+    )
 
 
 @router.patch("/tasks/{task_id}")
