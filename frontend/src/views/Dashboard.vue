@@ -1016,34 +1016,84 @@
               </div>
             </div>
             <div class="p-3 flex-1 overflow-y-auto min-h-0">
-              <div v-if="autoAvailableTags.length > 0" class="mb-3">
-                <div class="text-[11px] text-gray-500 mb-2">按标签筛选：</div>
-                <div class="flex flex-wrap gap-1.5">
+              <div v-if="autoAvailableTags.length > 0 || autoTagSearchQuery || autoFilterTag" class="mb-3">
+                <div class="mb-2 flex items-center justify-between gap-2">
+                  <div class="text-[11px] text-gray-500">按标签筛选：</div>
+                  <button
+                    v-if="autoTagSearchQuery || autoShowAllTags"
+                    type="button"
+                    @click="showRecentAutoTags"
+                    class="text-[10px] font-medium text-indigo-600 hover:text-indigo-700"
+                  >
+                    最近标签
+                  </button>
+                  <button
+                    v-else
+                    type="button"
+                    @click="showAllAutoTags"
+                    class="text-[10px] font-medium text-indigo-600 hover:text-indigo-700"
+                  >
+                    查看全部标签
+                  </button>
+                </div>
+                <div class="relative mb-2">
+                  <input
+                    v-model="autoTagSearchQuery"
+                    type="text"
+                    placeholder="搜索标签，如：永"
+                    class="w-full rounded-md border border-gray-200 bg-white py-1.5 pl-7 pr-7 text-[11px] text-gray-700 placeholder:text-gray-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                    @keydown.enter.prevent="selectFirstMatchedAutoTag"
+                  />
+                  <svg class="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35m1.35-5.65a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <button
+                    v-if="autoTagSearchQuery"
+                    type="button"
+                    @click="clearAutoTagSearch"
+                    class="absolute right-1.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+                    title="清空搜索"
+                  >
+                    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div v-if="autoFilterTag" class="mb-2 inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-1 text-[10px] text-indigo-700">
+                  当前标签：{{ autoFilterTag.name }}
+                  <button type="button" @click="selectAutoTag(null)" class="font-semibold text-indigo-500 hover:text-indigo-700">×</button>
+                </div>
+                <div v-if="autoTagSearchQuery" class="mb-2 text-[10px] text-gray-400">匹配 {{ autoAvailableTags.length }}/{{ autoTagTotal }} 个标签，按 Enter 选择第一个</div>
+                <div v-else-if="autoShowAllTags" class="mb-2 text-[10px] text-gray-400">全部标签 {{ autoAvailableTags.length }}/{{ autoTagTotal }}</div>
+                <div v-else class="mb-2 text-[10px] text-gray-400">最近使用标签</div>
+                <div class="flex flex-wrap gap-1.5 overflow-y-auto pr-1" :class="autoShowAllTags || autoTagSearchQuery ? 'max-h-44' : 'max-h-24'">
                   <button
                     type="button"
-                    @click="filterByTag('')"
+                    @click="selectAutoTag(null)"
                     class="px-2.5 py-1 rounded-full text-[10px] transition"
                     :class="!autoFilterTag ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
                   >
                     全部
                   </button>
                   <button
-                    v-for="tag in autoAvailableTags"
-                    :key="tag"
+                    v-for="tag in autoDisplayedTags"
+                    :key="tag.id"
                     type="button"
-                    @click="filterByTag(tag)"
+                    @click="selectAutoTag(tag)"
                     class="px-2.5 py-1 rounded-full text-[10px] transition"
-                    :class="autoFilterTag === tag ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                    :class="autoFilterTag?.id === tag.id ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
                   >
-                    {{ tag }}
+                    {{ tag.name }}<span class="ml-1 opacity-70">{{ tag.usage_count }}</span>
                   </button>
+                </div>
+                <div v-if="autoAvailableTags.length === 0 && autoTagSearchQuery.trim()" class="rounded-md bg-gray-50 px-3 py-2 text-center text-[11px] text-gray-400">
+                  未找到匹配标签
                 </div>
               </div>
               <div class="mb-3">
                 <div class="text-[11px] text-gray-500 mb-2">按语言筛选：</div>
                 <select
                   v-model="autoFilterLanguage"
-                  @change="filterByLanguage(autoFilterLanguage)"
                   class="w-full px-2 py-1.5 border border-gray-300 rounded-md bg-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-600"
                 >
                   <option value="">全部语言</option>
@@ -1623,7 +1673,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import OSS from 'ali-oss'
@@ -3576,6 +3626,7 @@ const startAutoTranslation = async () => {
     // Reload history to show the new task after animation
     setTimeout(async () => {
       await loadAutoTranslationHistory()
+      await loadAutoTags({ query: '', showAll: false })
       showSubmitAnimation.value = false
     }, 1000)
   } catch (error) {
@@ -3673,13 +3724,25 @@ const getVideoDuration = (file) => {
   })
 }
 
-const autoFilterTag = ref('')
+const autoFilterTag = ref(null)
+const autoTagSearchQuery = ref('')
 const autoFilterLanguage = ref('')
 const autoAvailableTags = ref([])
+const autoTagTotal = ref(0)
+const autoShowAllTags = ref(false)
+const autoTagRequestSequence = ref(0)
+
+// Limit recently used tags to 3 rows (approximately 9 tags)
+const autoDisplayedTags = computed(() => {
+  if (autoShowAllTags.value || autoTagSearchQuery.value.trim()) {
+    return autoAvailableTags.value
+  }
+  // Show only first 9 tags (3 rows) for recently used tags
+  return autoAvailableTags.value.slice(0, 9)
+})
 const autoExpandedHistory = ref([])
 const autoHistoryThumbnails = ref({})
 const autoSelectedHistoryIds = ref([])
-
 const autoSelectedHistoryItems = computed(() => autoExpandedHistory.value.filter(item => autoSelectedHistoryIds.value.includes(item.id)))
 const autoDownloadableSelectedHistoryItems = computed(() => autoSelectedHistoryItems.value.filter(item => item.result_video_url || item.videoUrl))
 const isAutoCurrentPageFullySelected = computed(() => autoExpandedHistory.value.length > 0 && autoExpandedHistory.value.every(item => autoSelectedHistoryIds.value.includes(item.id)))
@@ -3940,55 +4003,90 @@ const generateHistoryVideoThumbnail = (item) => {
   video.onerror = cleanup
 }
 
+const loadAutoTags = async ({ query = autoTagSearchQuery.value, showAll = autoShowAllTags.value } = {}) => {
+  const requestSequence = autoTagRequestSequence.value + 1
+  autoTagRequestSequence.value = requestSequence
+  const trimmedQuery = query.trim()
+  const params = {
+    is_auto: true,
+    sort: trimmedQuery ? 'recent' : (showAll ? 'popular' : 'recent'),
+    limit: trimmedQuery ? 50 : (showAll ? 200 : 10)
+  }
+
+  if (trimmedQuery) {
+    params.q = trimmedQuery
+  }
+
+  const response = await axios.get(
+    `${API_BASE}/video-translation/tags`,
+    {
+      params,
+      headers: {
+        'Authorization': `Bearer ${authStore.token}`
+      }
+    }
+  )
+
+  if (requestSequence !== autoTagRequestSequence.value) {
+    return
+  }
+
+  autoAvailableTags.value = response.data.items || []
+  autoTagTotal.value = response.data.total || 0
+}
+
 const loadAutoTranslationHistory = async () => {
   try {
     const params = {
       is_auto: true,
-      page: 1,
-      page_size: 1000  // Increased from 100 to 1000 to load more history
+      page: autoCurrentPage.value,
+      page_size: autoPageSize.value
+    }
+    if (autoFilterTag.value?.id) {
+      params.tag_id = autoFilterTag.value.id
+    }
+    if (autoFilterLanguage.value) {
+      params.language = autoFilterLanguage.value
+    }
+    const requestConfig = {
+      headers: {
+        'Authorization': `Bearer ${authStore.token}`
+      }
     }
     const response = await axios.get(
       `${API_BASE}/video-translation/tasks`,
       {
         params,
-        headers: {
-          'Authorization': `Bearer ${authStore.token}`
-        }
+        ...requestConfig
       }
     )
 
-    // Extract all unique tags from history
-    const allTags = new Set()
     const expandedItems = []
 
     response.data.items.forEach(task => {
-      if (task.tags && Array.isArray(task.tags)) {
-        task.tags.forEach(tag => allTags.add(tag))
-      }
-
-      // Expand task into individual language video items
       const taskHasResults = task.language_results && typeof task.language_results === 'object' && Object.keys(task.language_results).length > 0
 
       if (taskHasResults) {
         Object.entries(task.language_results).forEach(([langCode, result]) => {
-          expandedItems.push({
-            id: `${task.id}-${langCode}`,
-            taskId: task.id,
-            original_filename: task.original_filename,
-            languageCode: langCode,
-            languageName: getLanguageName(langCode),
-            videoUrl: result?.result_video_url || null,
-            result_video_url: result?.result_video_url || null,
-            original_video_url: task.original_video_url || null,
-            target_languages: [langCode],
-            status: result?.status || task.status,
-            current_stage: task.current_stage,
-            created_at: task.created_at,
-            tags: task.tags || []
-          })
+          if (!autoFilterLanguage.value || langCode === autoFilterLanguage.value) {
+            expandedItems.push({
+              id: `${task.id}-${langCode}`,
+              taskId: task.id,
+              original_filename: task.original_filename,
+              languageCode: langCode,
+              languageName: getLanguageName(langCode),
+              videoUrl: result?.result_video_url || null,
+              result_video_url: result?.result_video_url || null,
+              original_video_url: task.original_video_url || null,
+              target_languages: [langCode],
+              status: result?.status || task.status,
+              current_stage: task.current_stage,
+              created_at: task.created_at,
+              tags: task.tags || []
+            })
+          }
         })
       } else {
-        // Only add main entry if there are no language_results
         expandedItems.push({
           id: `${task.id}-main`,
           taskId: task.id,
@@ -4007,38 +4105,75 @@ const loadAutoTranslationHistory = async () => {
       }
     })
 
-    autoAvailableTags.value = Array.from(allTags)
-
-    // Filter by tag and language
-    let filteredItems = expandedItems
-    if (autoFilterTag.value) {
-      filteredItems = filteredItems.filter(item =>
-        item.tags && item.tags.includes(autoFilterTag.value)
-      )
-    }
-    if (autoFilterLanguage.value) {
-      filteredItems = filteredItems.filter(item =>
-        item.languageCode === autoFilterLanguage.value
-      )
-    }
-
-    // Pagination for expanded items
-    const startIndex = (autoCurrentPage.value - 1) * autoPageSize.value
-    const endIndex = startIndex + autoPageSize.value
-    autoExpandedHistory.value = filteredItems.slice(startIndex, endIndex)
+    // 直接使用展开后的数据，不再进行客户端分页
+    autoExpandedHistory.value = expandedItems
     autoExpandedHistory.value.forEach(generateHistoryVideoThumbnail)
-    autoTotalPages.value = Math.ceil(filteredItems.length / autoPageSize.value) || 1
+
+    // 使用后端返回的分页信息
+    autoTotalPages.value = response.data.total_pages || 1
+
     syncAutoHistorySelectionWithCurrentPage()
   } catch (error) {
     console.error('Failed to load auto translation history:', error)
   }
 }
 
-const filterByTag = (tag) => {
-  autoFilterTag.value = tag
-  autoCurrentPage.value = 1
+const clearAutoTagSearch = () => {
+  autoTagSearchQuery.value = ''
+  autoShowAllTags.value = false
+  loadAutoTags({ query: '', showAll: false })
+}
+
+const selectAutoTag = (tag) => {
+  filterByTag(tag)
   loadAutoTranslationHistory()
 }
+
+const selectFirstMatchedAutoTag = async () => {
+  await loadAutoTags({ query: autoTagSearchQuery.value.trim(), showAll: false })
+  const firstMatchedTag = autoAvailableTags.value[0]
+  if (firstMatchedTag) {
+    selectAutoTag(firstMatchedTag)
+  }
+}
+
+const filterByTag = (tag) => {
+  autoFilterTag.value = tag
+}
+
+const showAllAutoTags = () => {
+  autoShowAllTags.value = true
+  loadAutoTags({ query: '', showAll: true })
+}
+
+const showRecentAutoTags = () => {
+  autoTagSearchQuery.value = ''
+  autoShowAllTags.value = false
+  loadAutoTags({ query: '', showAll: false })
+}
+
+let autoTagSearchTimer = null
+watch(autoTagSearchQuery, (query) => {
+  if (autoTagSearchTimer) {
+    clearTimeout(autoTagSearchTimer)
+  }
+
+  autoTagSearchTimer = setTimeout(() => {
+    const trimmedQuery = query.trim()
+    autoShowAllTags.value = false
+    loadAutoTags({ query: trimmedQuery, showAll: false })
+  }, 250)
+})
+
+watch(autoFilterLanguage, () => {
+  autoCurrentPage.value = 1
+  loadAutoTranslationHistory()
+})
+
+watch(autoFilterTag, () => {
+  autoCurrentPage.value = 1
+  loadAutoTranslationHistory()
+})
 
 const getSelectedTaskLanguageName = (task) => {
   if (!task || !task.target_languages || task.target_languages.length === 0) {
@@ -4051,8 +4186,6 @@ const getSelectedTaskLanguageName = (task) => {
 
 const filterByLanguage = (langCode) => {
   autoFilterLanguage.value = langCode
-  autoCurrentPage.value = 1
-  loadAutoTranslationHistory()
 }
 
 const playExpandedVideo = (item) => {
@@ -4202,6 +4335,7 @@ const refreshAutoTranslationHistory = async () => {
 
 onMounted(() => {
   loadAutoTranslationHistory()
+  loadAutoTags()
   fetchUserPoints()
   fetchCustomVoices()
 })
