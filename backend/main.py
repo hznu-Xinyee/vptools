@@ -4,16 +4,12 @@ from fastapi import Request, Response
 from fastapi.staticfiles import StaticFiles
 import logging
 import os
-from app.core.database import engine, Base, ensure_tags_column
 from app.routers import auth_router, subtitle_task_router, subtitle_extract_router, video_translation_router
 from app.routers.custom_voice import router as custom_voice_router
 
 # Enable detailed logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
-
-Base.metadata.create_all(bind=engine)
-ensure_tags_column()
 
 app = FastAPI(title="VP Backend", version="1.0.0")
 
