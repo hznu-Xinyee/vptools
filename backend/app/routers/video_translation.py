@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Header
 from fastapi.responses import StreamingResponse
+from sqlalchemy import func, or_
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Any, Dict, List, Optional, Union
@@ -22,6 +24,7 @@ from app.models.user import User
 from app.models.subtitle_extract import SubtitleExtractTask, ExtractStatus
 from app.models.subtitle_task import SubtitleTask, TaskStatus
 from app.models.video_translation import VideoTranslationTask, VideoTranslationStatus
+from app.models.video_translation_tag import VideoTranslationTag, VideoTranslationTaskTag
 from app.schemas.video_translation import SubtitleParams, VideoTranslationSubmitRequest, VideoTranslationSubmitResponse
 from app.services.oss_service import oss_service
 from app.services.ice_service import ice_service
@@ -113,6 +116,57 @@ def _json_loads(value: Optional[str], fallback: Any):
         return json.loads(value)
     except (TypeError, json.JSONDecodeError):
         return fallback
+
+
+def _normalize_tag_name(value: Any) -> str:
+    if value is None:
+        return ""
+    return re.sub(r"\s+", " ", str(value).strip())[:100]
+
+
+def _normalize_tag_key(value: Any) -> str:
+    return _normalize_tag_name(value).lower()
+
+
+def _normalize_tag_list(tags: Optional[List[str]]) -> List[str]:
+    normalized_tags = []
+    seen = set()
+    for tag in tags or []:
+        tag_name = _normalize_tag_name(tag)
+        tag_key = _normalize_tag_key(tag_name)
+        if not tag_name or tag_key in seen:
+            continue
+        normalized_tags.append(tag_name)
+        seen.add(tag_key)
+    return normalized_tags
+
+
+def _sync_video_translation_task_tags(db: Session, task: VideoTranslationTask, raw_tags: Optional[List[str]]) -> List[str]:
+    normalized_tags = _normalize_tag_list(raw_tags)
+    task.tags = json.dumps(normalized_tags, ensure_ascii=False) if normalized_tags else None
+
+    db.query(VideoTranslationTaskTag).filter(VideoTranslationTaskTag.task_id == task.id).delete()
+    for tag_name in normalized_tags:
+        normalized_name = _normalize_tag_key(tag_name)
+        tag_id = db.execute(
+            pg_insert(VideoTranslationTag)
+            .values(
+                user_id=task.user_id,
+                name=tag_name,
+                normalized_name=normalized_name,
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+            )
+            .on_conflict_do_update(
+                constraint="uq_video_translation_tags_user_normalized_name",
+                set_={"updated_at": datetime.utcnow()},
+            )
+            .returning(VideoTranslationTag.id)
+        ).scalar_one()
+
+        db.add(VideoTranslationTaskTag(task_id=task.id, tag_id=tag_id))
+
+    return normalized_tags
 
 
 def _get_task_target_languages(task: VideoTranslationTask) -> List[str]:
@@ -547,10 +601,11 @@ async def submit_auto_translation(
             charged_points=required_points,
             status=VideoTranslationStatus.PROCESSING,
             is_auto=True,
-            current_stage="queued",
-            tags=json.dumps(request.tags or [], ensure_ascii=False) if request.tags else None
+            current_stage="queued"
         )
         db.add(task)
+        db.flush()
+        _sync_video_translation_task_tags(db, task, request.tags)
         db.commit()
         db.refresh(task)
         
@@ -673,25 +728,129 @@ async def submit_video_translation_task(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
+@router.get("/tags")
+async def get_video_translation_tags(
+    q: Optional[str] = None,
+    sort: str = "recent",
+    limit: int = 10,
+    is_auto: bool = True,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    normalized_query = _normalize_tag_key(q) if q else ""
+    safe_limit = min(max(limit, 1), 200)
+
+    query = db.query(
+        VideoTranslationTag.id,
+        VideoTranslationTag.name,
+        func.count(VideoTranslationTaskTag.task_id).label("usage_count"),
+        func.max(VideoTranslationTask.created_at).label("last_used_at")
+    ).join(
+        VideoTranslationTaskTag,
+        VideoTranslationTaskTag.tag_id == VideoTranslationTag.id
+    ).join(
+        VideoTranslationTask,
+        VideoTranslationTask.id == VideoTranslationTaskTag.task_id
+    ).filter(
+        VideoTranslationTag.user_id == current_user.id,
+        VideoTranslationTask.user_id == current_user.id
+    )
+
+    if is_auto is not None:
+        query = query.filter(VideoTranslationTask.is_auto == is_auto)
+
+    if normalized_query:
+        query = query.filter(VideoTranslationTag.normalized_name.contains(normalized_query))
+
+    query = query.group_by(VideoTranslationTag.id, VideoTranslationTag.name)
+
+    total = query.count()
+    if sort == "popular":
+        query = query.order_by(func.count(VideoTranslationTaskTag.task_id).desc(), func.max(VideoTranslationTask.created_at).desc())
+    elif sort == "name":
+        query = query.order_by(VideoTranslationTag.name.asc())
+    else:
+        query = query.order_by(func.max(VideoTranslationTask.created_at).desc(), func.count(VideoTranslationTaskTag.task_id).desc())
+
+    items = query.limit(safe_limit).all()
+    return {
+        "items": [
+            {
+                "id": item.id,
+                "name": item.name,
+                "usage_count": item.usage_count,
+                "last_used_at": item.last_used_at.isoformat() if item.last_used_at else None,
+            }
+            for item in items
+        ],
+        "total": total,
+    }
+
+
 @router.get("/tasks")
 async def get_video_translation_tasks(
     page: int = 1,
     page_size: int = 10,
     is_auto: bool = None,
     tags: Optional[str] = None,
+    tag_id: Optional[int] = None,
+    language: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if page_size < 1:
+        page_size = 10
+    elif page_size > 1000:
+        page_size = 1000
+    if page < 1:
+        page = 1
+
     offset = (page - 1) * page_size
     query = db.query(VideoTranslationTask).filter(VideoTranslationTask.user_id == current_user.id)
-    
+
     if is_auto is not None:
         query = query.filter(VideoTranslationTask.is_auto == is_auto)
+
+    if language:
+        query = query.filter(
+            or_(
+                VideoTranslationTask.target_language == language,
+                VideoTranslationTask.target_languages.contains(f'"{language}"'),
+                VideoTranslationTask.language_results_json.contains(f'"{language}"')
+            )
+        )
+    
+    if tag_id:
+        query = query.join(
+            VideoTranslationTaskTag,
+            VideoTranslationTaskTag.task_id == VideoTranslationTask.id
+        ).join(
+            VideoTranslationTag,
+            VideoTranslationTag.id == VideoTranslationTaskTag.tag_id
+        ).filter(
+            VideoTranslationTaskTag.tag_id == tag_id,
+            VideoTranslationTag.user_id == current_user.id
+        )
     
     if tags:
-        tag_list = [tag.strip() for tag in tags.split(',') if tag.strip()]
-        for tag in tag_list:
-            query = query.filter(VideoTranslationTask.tags.like(f'%{tag}%'))
+        normalized_tags = list(dict.fromkeys(
+            _normalize_tag_key(tag)
+            for tag in tags.split(',')
+            if _normalize_tag_key(tag)
+        ))
+        if normalized_tags:
+            tagged_task_ids = db.query(VideoTranslationTaskTag.task_id).join(
+                VideoTranslationTag,
+                VideoTranslationTag.id == VideoTranslationTaskTag.tag_id
+            ).filter(
+                VideoTranslationTag.user_id == current_user.id,
+                VideoTranslationTag.normalized_name.in_(normalized_tags)
+            ).group_by(
+                VideoTranslationTaskTag.task_id
+            ).having(
+                func.count(func.distinct(VideoTranslationTag.normalized_name)) == len(normalized_tags)
+            ).subquery()
+            query = query.filter(VideoTranslationTask.id.in_(tagged_task_ids))
     
     total = query.count()
     tasks = query.order_by(VideoTranslationTask.created_at.desc()).offset(offset).limit(page_size).all()
