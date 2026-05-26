@@ -86,6 +86,11 @@ def _build_backend_auto_subtitle_params(subtitle_params: Optional[Dict[str, Any]
         "y": 0.75
     }
     params.update({key: value for key, value in (subtitle_params or {}).items() if value is not None})
+
+    # 强制设置换行参数，不管前端传什么
+    params["adapt_mode"] = "AutoWrap"
+    params["text_width"] = 0.8
+
     return params
 
 
