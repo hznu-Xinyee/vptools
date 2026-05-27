@@ -2409,7 +2409,14 @@ const autoTranslationPointCost = computed(() => {
     return sum + languagePoints * Math.max(1, timeUnits)
   }, 0)
 
-  return Math.max(languagePoints, totalPoints) // 至少扣除一个语言的基础积分
+  let finalPoints = Math.max(languagePoints, totalPoints) // 至少扣除一个语言的基础积分
+
+  // 全屏字幕擦除额外消耗5积分
+  if (autoFullScreenErase.value) {
+    finalPoints += 5
+  }
+
+  return finalPoints
 })
 const autoPendingVideoFiles = computed(() => autoVideoFiles.value.filter(file => !autoUploadedVideos.value.some(item => item.file === file)))
 const autoIsProcessing = ref(false)
