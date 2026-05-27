@@ -4,6 +4,7 @@ from app.models.subtitle_extract import SubtitleExtractTask, ExtractStatus
 from app.models.custom_voice import CustomVoice
 from app.models.video_translation import VideoTranslationTask, VideoTranslationStatus
 from app.models.video_translation_tag import VideoTranslationTag, VideoTranslationTaskTag
+from app.models.gift_card import GiftCard
 
 __all__ = [
     "User",
@@ -16,4 +17,5 @@ __all__ = [
     "VideoTranslationStatus",
     "VideoTranslationTag",
     "VideoTranslationTaskTag",
+    "GiftCard",
 ]

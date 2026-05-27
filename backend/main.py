@@ -6,6 +6,7 @@ import logging
 import os
 from app.routers import auth_router, subtitle_task_router, subtitle_extract_router, video_translation_router
 from app.routers.custom_voice import router as custom_voice_router
+from app.routers.gift_card import router as gift_card_router
 
 # Enable detailed logging
 logging.basicConfig(level=logging.DEBUG)
@@ -38,6 +39,7 @@ app.include_router(subtitle_task_router, prefix="/api/subtitle", tags=["subtitle
 app.include_router(subtitle_extract_router, prefix="/api/subtitle-extract", tags=["subtitle-extract"])
 app.include_router(video_translation_router, prefix="/api/video-translation", tags=["video-translation"])
 app.include_router(custom_voice_router, prefix="/api", tags=["custom-voice"])
+app.include_router(gift_card_router, prefix="/api", tags=["gift-card"])
 
 # Mount static files for voice previews
 HELLO_VOICES_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "public", "hello_voices")

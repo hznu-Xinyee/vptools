@@ -59,6 +59,9 @@
             <p class="text-xs text-gray-500 mb-1">积分</p>
             <p class="text-sm font-medium text-gray-900">{{ userPoints || 0 }}</p>
           </div>
+          <button @click="showGiftCardModal = true" class="w-full py-2 mb-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 transition">
+            点卡兑换
+          </button>
           <button @click="handleLogout" class="w-full py-2 bg-gray-100 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-200 transition">
             退出登录
           </button>
@@ -1670,6 +1673,101 @@
       </div>
     </div>
   </div>
+
+  <!-- Gift Card Redeem Modal -->
+  <div v-if="showGiftCardModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+      <div class="p-6 border-b border-gray-200">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xl font-semibold text-gray-900">点卡兑换</h2>
+          <button @click="closeGiftCardModal" class="text-gray-400 hover:text-gray-600 transition">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="p-6 space-y-4">
+        <!-- 卡密输入框 -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">点卡卡密</label>
+          <input
+            v-model="giftCardCode"
+            type="text"
+            placeholder="请输入16位卡密"
+            class="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600"
+            :disabled="isRedeeming"
+          />
+        </div>
+
+        <!-- 价格说明 -->
+        <div class="bg-indigo-50 rounded-lg p-4">
+          <p class="text-sm text-indigo-900 font-medium mb-2">💰 价格说明</p>
+          <p class="text-sm text-indigo-700">10 积分 = 1 RMB</p>
+        </div>
+
+        <!-- 点卡面额说明 -->
+        <div class="bg-gray-50 rounded-lg p-4">
+          <p class="text-sm text-gray-900 font-medium mb-3">📋 点卡面额</p>
+          <div class="space-y-2 text-sm text-gray-700">
+            <div class="flex justify-between">
+              <span>100 积分</span>
+              <span class="text-gray-500">= 10 元</span>
+            </div>
+            <div class="flex justify-between">
+              <span>1,000 积分</span>
+              <span class="text-gray-500">= 100 元</span>
+            </div>
+            <div class="flex justify-between">
+              <span>5,000 积分</span>
+              <span class="text-gray-500">= 500 元</span>
+            </div>
+            <div class="flex justify-between">
+              <span>50,000 积分</span>
+              <span class="text-gray-500">= 5,000 元</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 客服二维码 -->
+        <div class="bg-white border border-gray-200 rounded-lg p-4 text-center">
+          <p class="text-sm text-gray-700 font-medium mb-3">📱 购买点卡请联系客服</p>
+          <div class="flex justify-center">
+            <div class="w-48 h-48 bg-gray-100 rounded-lg flex items-center justify-center">
+              <p class="text-gray-400 text-sm">请联系客服购买点卡</p>
+            </div>
+          </div>
+          <p class="text-xs text-gray-500 mt-2">请将客服二维码图片放置到 public/qrcode.png</p>
+        </div>
+
+        <!-- 错误提示 -->
+        <div v-if="giftCardError" class="bg-red-50 border border-red-200 rounded-lg p-3">
+          <p class="text-sm text-red-600">{{ giftCardError }}</p>
+        </div>
+
+        <!-- 成功提示 -->
+        <div v-if="giftCardSuccess" class="bg-green-50 border border-green-200 rounded-lg p-3">
+          <p class="text-sm text-green-600">{{ giftCardSuccess }}</p>
+        </div>
+      </div>
+      <div class="p-6 border-t border-gray-200 flex justify-end gap-3">
+        <button
+          @click="closeGiftCardModal"
+          class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition"
+          :disabled="isRedeeming"
+        >
+          取消
+        </button>
+        <button
+          @click="redeemGiftCard"
+          :disabled="isRedeeming || !giftCardCode.trim()"
+          class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {{ isRedeeming ? '兑换中...' : '立即兑换' }}
+        </button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -1867,6 +1965,13 @@ const loginForm = ref({ username: '', password: '' })
 const loginError = ref('')
 const isUserCardExpanded = ref(false)
 
+// Gift card state
+const showGiftCardModal = ref(false)
+const giftCardCode = ref('')
+const isRedeeming = ref(false)
+const giftCardError = ref('')
+const giftCardSuccess = ref('')
+
 // Voice modal state
 const showVoiceModal = ref(false)
 const showAddVoiceModal = ref(false)
@@ -1921,6 +2026,52 @@ const handleLoginSubmit = async () => {
     loginError.value = '登录失败，请稍后重试'
   } finally {
     isLoggingIn.value = false
+  }
+}
+
+// Gift card functions
+const closeGiftCardModal = () => {
+  showGiftCardModal.value = false
+  giftCardCode.value = ''
+  giftCardError.value = ''
+  giftCardSuccess.value = ''
+}
+
+const redeemGiftCard = async () => {
+  if (!giftCardCode.value.trim()) {
+    giftCardError.value = '请输入点卡卡密'
+    return
+  }
+
+  isRedeeming.value = true
+  giftCardError.value = ''
+  giftCardSuccess.value = ''
+
+  try {
+    const response = await axios.post(
+      `${API_BASE}/gift-cards/redeem`,
+      { card_code: giftCardCode.value.trim() },
+      {
+        headers: { 'Authorization': `Bearer ${authStore.token}` }
+      }
+    )
+
+    giftCardSuccess.value = `兑换成功！获得 ${response.data.points_added} 积分，当前余额：${response.data.new_balance} 积分`
+    userPoints.value = response.data.new_balance
+
+    // 3秒后关闭弹窗
+    setTimeout(() => {
+      closeGiftCardModal()
+    }, 3000)
+
+  } catch (error) {
+    if (error.response?.data?.detail) {
+      giftCardError.value = error.response.data.detail
+    } else {
+      giftCardError.value = '兑换失败，请稍后重试'
+    }
+  } finally {
+    isRedeeming.value = false
   }
 }
 
