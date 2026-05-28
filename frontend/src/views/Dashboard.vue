@@ -396,7 +396,15 @@
               <h3 class="text-sm font-medium text-gray-900">待翻译视频</h3>
             </div>
             <div class="p-4">
-              <div @click="() => !translationIsSubmitting && translationVideoInputRef?.click()" class="border-2 border-dashed rounded-lg p-6 text-center transition-colors duration-200 relative" :class="translationIsSubmitting ? 'border-gray-300 bg-gray-50 cursor-not-allowed' : 'border-gray-300 hover:border-indigo-400 hover:bg-indigo-50/30 cursor-pointer'">
+              <div
+                @click="() => !translationIsSubmitting && translationVideoInputRef?.click()"
+                @dragenter.prevent="!translationIsSubmitting && (translationVideoDragOver = true)"
+                @dragover.prevent="!translationIsSubmitting && (translationVideoDragOver = true)"
+                @dragleave.prevent="translationVideoDragOver = false"
+                @drop.prevent="handleTranslationVideoDrop"
+                class="border-2 border-dashed rounded-lg p-6 text-center transition-colors duration-200 relative"
+                :class="translationIsSubmitting ? 'border-gray-300 bg-gray-50 cursor-not-allowed' : (translationVideoDragOver ? 'border-indigo-500 bg-indigo-50' : 'border-gray-300 hover:border-indigo-400 hover:bg-indigo-50/30 cursor-pointer')"
+              >
                 <input type="file" ref="translationVideoInputRef" @change="handleTranslationVideoSelect" accept="video/*" class="hidden" :disabled="translationIsSubmitting" />
                 
                 <!-- Loading Overlay -->
@@ -406,8 +414,8 @@
                 </div>
                 
                 <template v-if="!translationVideoFile">
-                  <p class="text-gray-700 text-sm font-medium">点击上传视频</p>
-                  <p class="text-gray-400 text-xs mt-1">支持 mp4, avi, mov 等</p>
+                  <p class="text-gray-700 text-sm font-medium">{{ translationVideoDragOver ? '松开以上传视频' : '点击或拖拽视频到此处上传' }}</p>
+                  <p class="text-gray-400 text-xs mt-1">支持 mp4, avi, mov 等，可拖拽文件夹批量识别</p>
                 </template>
                 <div v-else class="flex flex-col items-center">
                   <img v-if="translationVideoThumbnail" :src="translationVideoThumbnail" class="max-w-full h-auto max-h-36 object-contain rounded-lg mb-3" alt="Video thumbnail" />
@@ -960,9 +968,13 @@
             </div>
             <div class="p-4">
               <div
-                @click="() => !autoIsProcessing && autoVideoInputRef?.click()"
+                @click="() => !autoIsProcessing && !autoIsUploading && autoVideoInputRef?.click()"
+                @dragenter.prevent="!autoIsProcessing && !autoIsUploading && (autoVideoDragOver = true)"
+                @dragover.prevent="!autoIsProcessing && !autoIsUploading && (autoVideoDragOver = true)"
+                @dragleave.prevent="autoVideoDragOver = false"
+                @drop.prevent="handleAutoVideoDrop"
                 class="border-2 border-dashed rounded-lg p-6 text-center transition-colors duration-200 relative"
-                :class="autoIsProcessing || autoIsUploading ? 'border-gray-300 bg-gray-50 cursor-not-allowed' : 'border-gray-300 hover:border-indigo-400 hover:bg-indigo-50/30 cursor-pointer'"
+                :class="autoIsProcessing || autoIsUploading ? 'border-gray-300 bg-gray-50 cursor-not-allowed' : (autoVideoDragOver ? 'border-indigo-500 bg-indigo-50' : 'border-gray-300 hover:border-indigo-400 hover:bg-indigo-50/30 cursor-pointer')"
               >
                 <input type="file" ref="autoVideoInputRef" @change="handleAutoVideoSelect" accept="video/*" multiple class="hidden" :disabled="autoIsProcessing || autoIsUploading" />
                 
@@ -982,11 +994,12 @@
                 </div>
                 
                 <template v-if="autoVideoFiles.length === 0">
-                  <p class="text-gray-700 text-sm font-medium">点击上传视频</p>
-                  <p class="text-gray-400 text-xs mt-1">支持 mp4, avi, mov 等（可多选）</p>
+                  <p class="text-gray-700 text-sm font-medium">{{ autoVideoDragOver ? '松开以上传视频' : '点击或拖拽视频到此处上传' }}</p>
+                  <p class="text-gray-400 text-xs mt-1">支持 mp4, avi, mov 等（可多选/拖拽文件夹）</p>
                 </template>
                 <div v-else class="w-full">
                   <p class="text-gray-900 text-xs font-medium text-center">待上传 {{ autoVideoFiles.length }} 个视频</p>
+                  <p class="text-gray-400 text-[11px] mt-1 text-center">{{ autoVideoDragOver ? '松开以追加视频' : '可继续拖拽视频或文件夹追加' }}</p>
                 </div>
               </div>
             </div>
@@ -1759,6 +1772,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useLayoutStore } from '@/stores/layout'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { UploadFilled } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import MobileHeader from '@/components/MobileHeader.vue'
 import MobileDrawer from '@/components/MobileDrawer.vue'
 import ResponsiveVideoContainer from '@/components/ResponsiveVideoContainer.vue'
@@ -2544,6 +2558,85 @@ const stopDragSubtitle = () => {
   document.removeEventListener('mouseup', stopDragSubtitle)
 }
 
+// ===== Drag & Drop helpers (videos / folders) =====
+const VIDEO_FILE_EXTENSIONS = ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm', '.m4v', '.mpeg', '.mpg', '.3gp', '.ts']
+
+const isVideoFile = (file) => {
+  if (!file) return false
+  if (file.type && file.type.startsWith('video/')) return true
+  const name = (file.name || '').toLowerCase()
+  return VIDEO_FILE_EXTENSIONS.some(ext => name.endsWith(ext))
+}
+
+const readAllEntries = (reader) => new Promise((resolve, reject) => {
+  const all = []
+  const readBatch = () => {
+    reader.readEntries((batch) => {
+      if (!batch.length) {
+        resolve(all)
+      } else {
+        all.push(...batch)
+        readBatch()
+      }
+    }, reject)
+  }
+  readBatch()
+})
+
+const traverseFileEntry = async (entry, collected) => {
+  if (!entry) return
+  if (entry.isFile) {
+    await new Promise((resolve) => {
+      entry.file(
+        (file) => {
+          if (isVideoFile(file)) collected.push(file)
+          resolve()
+        },
+        () => resolve()
+      )
+    })
+  } else if (entry.isDirectory) {
+    const reader = entry.createReader()
+    try {
+      const entries = await readAllEntries(reader)
+      for (const sub of entries) {
+        await traverseFileEntry(sub, collected)
+      }
+    } catch (e) {
+      console.warn('Failed to read directory entries:', entry.fullPath, e)
+    }
+  }
+}
+
+// Extract all video files (recursing into dropped folders) from a DataTransfer
+const extractVideoFilesFromDataTransfer = async (dataTransfer) => {
+  const collected = []
+  const items = dataTransfer?.items
+  if (items && items.length && typeof items[0].webkitGetAsEntry === 'function') {
+    const entries = []
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]
+      if (item.kind === 'file') {
+        const entry = item.webkitGetAsEntry?.()
+        if (entry) entries.push(entry)
+      }
+    }
+    if (entries.length) {
+      for (const entry of entries) {
+        await traverseFileEntry(entry, collected)
+      }
+      return collected
+    }
+  }
+  // Fallback: plain files (no folder traversal available)
+  if (dataTransfer?.files?.length) {
+    for (const file of Array.from(dataTransfer.files)) {
+      if (isVideoFile(file)) collected.push(file)
+    }
+  }
+  return collected
+}
+
 // Generate video thumbnail
 const generateVideoThumbnail = (file) => {
   return new Promise((resolve) => {
@@ -2587,9 +2680,34 @@ const generateVideoThumbnail = (file) => {
 const handleTranslationVideoSelect = async (e) => {
   const file = e.target.files[0]
   if (file) {
-    translationVideoFile.value = file
-    translationVideoObjectUrl.value = URL.createObjectURL(file)
-    translationVideoThumbnail.value = await generateVideoThumbnail(file)
+    await applyTranslationVideoFile(file)
+  }
+}
+
+const applyTranslationVideoFile = async (file) => {
+  if (!file) return
+  if (translationVideoObjectUrl.value) {
+    URL.revokeObjectURL(translationVideoObjectUrl.value)
+  }
+  translationVideoFile.value = file
+  translationVideoObjectUrl.value = URL.createObjectURL(file)
+  translationVideoThumbnail.value = await generateVideoThumbnail(file)
+}
+
+// Drag & drop state for translation upload card
+const translationVideoDragOver = ref(false)
+
+const handleTranslationVideoDrop = async (e) => {
+  translationVideoDragOver.value = false
+  if (translationIsSubmitting.value) return
+  const videos = await extractVideoFilesFromDataTransfer(e.dataTransfer)
+  if (videos.length === 0) {
+    ElMessage.warning('未检测到可用的视频文件')
+    return
+  }
+  await applyTranslationVideoFile(videos[0])
+  if (videos.length > 1) {
+    ElMessage.info(`仅使用第一个视频文件：${videos[0].name}`)
   }
 }
 
@@ -3534,26 +3652,45 @@ const formatDate = (dateString) => {
 
 // Automatic video translation functions
 const handleAutoVideoSelect = async (e) => {
-  const files = Array.from(e.target.files || []).filter(file => file.type.startsWith('video/'))
+  const files = Array.from(e.target.files || []).filter(file => isVideoFile(file))
   if (files.length > 0) {
-    autoVideoFiles.value = [...autoVideoFiles.value, ...files]
-    autoPreviewVideoIndex.value = 0
-    autoVideoThumbnail.value = await generateVideoThumbnail(autoVideoFiles.value[0])
-    // Manage object URL for center preview
-    if (autoVideoObjectUrl.value) {
-      URL.revokeObjectURL(autoVideoObjectUrl.value)
-    }
-    autoVideoObjectUrl.value = URL.createObjectURL(autoVideoFiles.value[0])
-    // Clear history video URL to ensure preview shows the new video
-    currentVideoUrl.value = ''
-    autoSelectedHistoryTask.value = null
-    currentPlayingTask.value = null
-    currentPlayingLanguage.value = null
-    // Reset subtitle preview to hide it until video metadata loads
-    showSubtitlePreview.value = false
-    videoMetadataLoaded.value = 0
+    await addAutoVideoFiles(files)
     e.target.value = ''
   }
+}
+
+const addAutoVideoFiles = async (files) => {
+  if (!files || !files.length) return
+  autoVideoFiles.value = [...autoVideoFiles.value, ...files]
+  autoPreviewVideoIndex.value = 0
+  autoVideoThumbnail.value = await generateVideoThumbnail(autoVideoFiles.value[0])
+  if (autoVideoObjectUrl.value) {
+    URL.revokeObjectURL(autoVideoObjectUrl.value)
+  }
+  autoVideoObjectUrl.value = URL.createObjectURL(autoVideoFiles.value[0])
+  // Clear history video URL to ensure preview shows the new video
+  currentVideoUrl.value = ''
+  autoSelectedHistoryTask.value = null
+  currentPlayingTask.value = null
+  currentPlayingLanguage.value = null
+  // Reset subtitle preview to hide it until video metadata loads
+  showSubtitlePreview.value = false
+  videoMetadataLoaded.value = 0
+}
+
+// Drag & drop state for auto-translate upload card
+const autoVideoDragOver = ref(false)
+
+const handleAutoVideoDrop = async (e) => {
+  autoVideoDragOver.value = false
+  if (autoIsProcessing.value || autoIsUploading.value) return
+  const videos = await extractVideoFilesFromDataTransfer(e.dataTransfer)
+  if (videos.length === 0) {
+    ElMessage.warning('未检测到可用的视频文件')
+    return
+  }
+  await addAutoVideoFiles(videos)
+  ElMessage.success(`已添加 ${videos.length} 个视频`)
 }
 
 // 多文件并发上传到 OSS
