@@ -142,42 +142,67 @@ const fragment = /* glsl */ `
   }
 `
 
-let cleanup = null
+let renderer = null
+let gl = null
+let camera = null
+let geometry = null
+let program = null
+let mesh = null
+let animationFrameId = null
+let lastTime = performance.now()
+let elapsed = 0
 
-onMounted(() => {
+let activeResizeHandler = null
+let activeMouseMoveHandler = null
+let activeContainer = null
+let activeMouseTarget = null
+let activeGl = null
+
+const initParticles = () => {
+  cleanup()
+
   const container = containerRef.value
   if (!container) return
 
-  const renderer = new Renderer({
+  renderer = new Renderer({
     dpr: props.pixelRatio,
     depth: false,
     alpha: true
   })
-  const gl = renderer.gl
+  gl = renderer.gl
   container.appendChild(gl.canvas)
   gl.clearColor(0, 0, 0, 0)
 
-  const camera = new Camera(gl, { fov: 15 })
+  camera = new Camera(gl, { fov: 15 })
   camera.position.set(0, 0, props.cameraDistance)
+
+  let cachedRect = null
+  const updateRect = () => {
+    cachedRect = container.getBoundingClientRect()
+  }
 
   const resize = () => {
     const width = container.clientWidth
     const height = container.clientHeight
-    renderer.setSize(width, height)
-    camera.perspective({ aspect: gl.canvas.width / gl.canvas.height })
+    if (width && height && renderer && camera) {
+      renderer.setSize(width, height)
+      camera.perspective({ aspect: gl.canvas.width / gl.canvas.height })
+    }
+    updateRect()
   }
   window.addEventListener('resize', resize, false)
   resize()
 
   const handleMouseMove = e => {
-    const rect = container.getBoundingClientRect()
-    const x = ((e.clientX - rect.left) / rect.width) * 2 - 1
-    const y = -(((e.clientY - rect.top) / rect.height) * 2 - 1)
+    if (!cachedRect) updateRect()
+    const x = ((e.clientX - cachedRect.left) / cachedRect.width) * 2 - 1
+    const y = -(((e.clientY - cachedRect.top) / cachedRect.height) * 2 - 1)
     mouseRef.value = { x, y }
   }
 
+  const mouseTarget = container.parentElement || container
   if (props.moveParticlesOnHover) {
-    container.addEventListener('mousemove', handleMouseMove)
+    mouseTarget.addEventListener('mousemove', handleMouseMove)
   }
 
   const count = props.particleCount
@@ -201,13 +226,13 @@ onMounted(() => {
     colors.set(col, i * 3)
   }
 
-  const geometry = new Geometry(gl, {
+  geometry = new Geometry(gl, {
     position: { size: 3, data: positions },
     random: { size: 4, data: randoms },
     color: { size: 3, data: colors }
   })
 
-  const program = new Program(gl, {
+  program = new Program(gl, {
     vertex,
     fragment,
     uniforms: {
@@ -221,14 +246,18 @@ onMounted(() => {
     depthTest: false
   })
 
-  const particles = new Mesh(gl, { mode: gl.POINTS, geometry, program })
+  mesh = new Mesh(gl, { mode: gl.POINTS, geometry, program })
 
-  let animationFrameId
-  let lastTime = performance.now()
-  let elapsed = 0
+  lastTime = performance.now()
 
   const update = t => {
     animationFrameId = requestAnimationFrame(update)
+
+    // Performance guard: do not render or update if container is hidden (e.g., display: none on mobile)
+    if (container.clientWidth === 0 || container.clientHeight === 0) {
+      return
+    }
+
     const delta = t - lastTime
     lastTime = t
     elapsed += delta * props.speed
@@ -236,41 +265,110 @@ onMounted(() => {
     program.uniforms.uTime.value = elapsed * 0.001
 
     if (props.moveParticlesOnHover) {
-      particles.position.x = -mouseRef.value.x * props.particleHoverFactor
-      particles.position.y = -mouseRef.value.y * props.particleHoverFactor
+      mesh.position.x = -mouseRef.value.x * props.particleHoverFactor
+      mesh.position.y = -mouseRef.value.y * props.particleHoverFactor
     } else {
-      particles.position.x = 0
-      particles.position.y = 0
+      mesh.position.x = 0
+      mesh.position.y = 0
     }
 
     if (!props.disableRotation) {
-      particles.rotation.x = Math.sin(elapsed * 0.0002) * 0.1
-      particles.rotation.y = Math.cos(elapsed * 0.0005) * 0.15
-      particles.rotation.z += 0.01 * props.speed
+      mesh.rotation.x = Math.sin(elapsed * 0.0002) * 0.1
+      mesh.rotation.y = Math.cos(elapsed * 0.0005) * 0.15
+      mesh.rotation.z += 0.01 * props.speed
     }
 
-    renderer.render({ scene: particles, camera })
+    renderer.render({ scene: mesh, camera })
   }
 
   animationFrameId = requestAnimationFrame(update)
 
-  cleanup = () => {
-    window.removeEventListener('resize', resize)
-    if (props.moveParticlesOnHover) {
-      container.removeEventListener('mousemove', handleMouseMove)
-    }
+  activeResizeHandler = resize
+  activeMouseMoveHandler = handleMouseMove
+  activeContainer = container
+  activeMouseTarget = mouseTarget
+  activeGl = gl
+}
+
+const cleanup = () => {
+  if (animationFrameId) {
     cancelAnimationFrame(animationFrameId)
-    if (container.contains(gl.canvas)) {
-      container.removeChild(gl.canvas)
-    }
+    animationFrameId = null
   }
+  if (activeResizeHandler) {
+    window.removeEventListener('resize', activeResizeHandler)
+    activeResizeHandler = null
+  }
+  if (activeMouseTarget && activeMouseMoveHandler) {
+    activeMouseTarget.removeEventListener('mousemove', activeMouseMoveHandler)
+    activeMouseMoveHandler = null
+  }
+  activeMouseTarget = null
+  if (activeContainer && activeGl && activeGl.canvas && activeContainer.contains(activeGl.canvas)) {
+    activeContainer.removeChild(activeGl.canvas)
+  }
+  activeContainer = null
+  activeGl = null
+  renderer = null
+  gl = null
+  camera = null
+  geometry = null
+  program = null
+  mesh = null
+}
+
+onMounted(() => {
+  initParticles()
 })
 
 onUnmounted(() => {
-  if (cleanup) {
-    cleanup()
-  }
+  cleanup()
 })
+
+// Watchers for full re-initialization on structural props changes
+watch(
+  () => [props.particleCount, props.particleColors, props.cameraDistance, props.moveParticlesOnHover],
+  () => {
+    initParticles()
+  },
+  { deep: true }
+)
+
+// Watchers for dynamic uniform updates without recreating WebGL context
+watch(
+  () => props.particleSpread,
+  (val) => {
+    if (program) program.uniforms.uSpread.value = val
+  }
+)
+
+watch(
+  () => props.particleBaseSize,
+  (val) => {
+    if (program) program.uniforms.uBaseSize.value = val * props.pixelRatio
+  }
+)
+
+watch(
+  () => props.pixelRatio,
+  (val) => {
+    if (program) program.uniforms.uBaseSize.value = props.particleBaseSize * val
+  }
+)
+
+watch(
+  () => props.sizeRandomness,
+  (val) => {
+    if (program) program.uniforms.uSizeRandomness.value = val
+  }
+)
+
+watch(
+  () => props.alphaParticles,
+  (val) => {
+    if (program) program.uniforms.uAlphaParticles.value = val ? 1 : 0
+  }
+)
 </script>
 
 <style scoped>

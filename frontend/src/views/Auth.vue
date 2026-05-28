@@ -1,7 +1,5 @@
 <template>
   <div class="auth-page">
-    <MouseFollower />
-
     <div class="auth-container">
       <!-- 左侧品牌区域 -->
       <BrandSection />
@@ -121,7 +119,6 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import MouseFollower from '../components/auth/MouseFollower.vue'
 import BrandSection from '../components/auth/BrandSection.vue'
 import FormField from '../components/auth/FormField.vue'
 import SubmitButton from '../components/auth/SubmitButton.vue'
