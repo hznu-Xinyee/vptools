@@ -83,16 +83,6 @@
     <main :class="['w-screen h-screen', !isDesktop ? 'pt-14' : '']">
       <!-- Subtitle Erase Feature (Four-column) -->
       <div v-if="currentFeature === 'subtitle-erase'" class="flex min-h-screen">
-        <!-- Far Left Wider Nav -->
-        <aside v-if="isDesktop" class="w-44 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-1.5 flex">
-          <div class="text-xs text-gray-500 px-1 mb-1">导航</div>
-          <button @click="navigateToFeature('auto-video-translate')" class="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-gray-100">视频翻译（自动版）</button>
-          <button @click="navigateToFeature('subtitle-erase')" class="w-full text-left px-3 py-2 rounded-md text-sm bg-indigo-100 text-indigo-700">字幕擦除</button>
-          <button @click="navigateToFeature('subtitle-extract')" class="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-gray-100">字幕提取</button>
-          <button @click="navigateToFeature('subtitle-embed')" class="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-gray-100">视频翻译（手动）</button>
-          <button @click="navigateToFeature('image-translate')" class="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-gray-100">图片翻译</button>
-        </aside>
-
         <!-- Left Process Config Column -->
         <aside v-if="isDesktop" class="w-72 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-3 flex">
           <div class="bg-white rounded-xl border border-gray-200 shadow-sm">
@@ -200,16 +190,6 @@
 
       <!-- Subtitle Extract Feature (Four-column) -->
       <div v-else-if="currentFeature === 'subtitle-extract'" class="flex min-h-screen">
-        <!-- Far Left Wider Nav -->
-        <aside v-if="isDesktop" class="w-44 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-1.5 flex">
-          <div class="text-xs text-gray-500 px-1 mb-1">导航</div>
-          <button @click="navigateToFeature('auto-video-translate')" class="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-gray-100">视频翻译（自动版）</button>
-          <button @click="navigateToFeature('subtitle-erase')" class="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-gray-100">字幕擦除</button>
-          <button @click="navigateToFeature('subtitle-extract')" class="w-full text-left px-3 py-2 rounded-md text-sm bg-indigo-100 text-indigo-700">字幕提取</button>
-          <button @click="navigateToFeature('subtitle-embed')" class="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-gray-100">视频翻译（手动）</button>
-          <button @click="navigateToFeature('image-translate')" class="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-gray-100">图片翻译</button>
-        </aside>
-
         <!-- Left Process Config Column -->
         <aside v-if="isDesktop" class="w-72 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-3 flex">
           <div class="bg-white rounded-xl border border-gray-200 shadow-sm">
@@ -333,16 +313,6 @@
 
       <!-- Video Translation Feature (Four-column) -->
       <div v-else-if="currentFeature === 'subtitle-embed'" class="flex min-h-screen">
-        <!-- Far Left Wider Nav -->
-        <aside v-if="isDesktop" class="w-44 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-1.5 flex">
-          <div class="text-xs text-gray-500 px-1 mb-1">导航</div>
-          <button @click="navigateToFeature('auto-video-translate')" class="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-gray-100">视频翻译（自动版）</button>
-          <button @click="navigateToFeature('subtitle-erase')" class="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-gray-100">字幕擦除</button>
-          <button @click="navigateToFeature('subtitle-extract')" class="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-gray-100">字幕提取</button>
-          <button @click="navigateToFeature('subtitle-embed')" class="w-full text-left px-3 py-2 rounded-md text-sm bg-indigo-100 text-indigo-700">视频翻译（手动）</button>
-          <button @click="navigateToFeature('image-translate')" class="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-gray-100">图片翻译</button>
-        </aside>
-
         <!-- Left Process Config Column -->
         <aside v-if="isDesktop" class="w-72 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-3 flex">
           <div class="bg-white rounded-xl border border-gray-200 shadow-sm">
@@ -426,7 +396,15 @@
               <h3 class="text-sm font-medium text-gray-900">待翻译视频</h3>
             </div>
             <div class="p-4">
-              <div @click="() => !translationIsSubmitting && translationVideoInputRef?.click()" class="border-2 border-dashed rounded-lg p-6 text-center transition-colors duration-200 relative" :class="translationIsSubmitting ? 'border-gray-300 bg-gray-50 cursor-not-allowed' : 'border-gray-300 hover:border-indigo-400 hover:bg-indigo-50/30 cursor-pointer'">
+              <div
+                @click="() => !translationIsSubmitting && translationVideoInputRef?.click()"
+                @dragenter.prevent="!translationIsSubmitting && (translationVideoDragOver = true)"
+                @dragover.prevent="!translationIsSubmitting && (translationVideoDragOver = true)"
+                @dragleave.prevent="translationVideoDragOver = false"
+                @drop.prevent="handleTranslationVideoDrop"
+                class="border-2 border-dashed rounded-lg p-6 text-center transition-colors duration-200 relative"
+                :class="translationIsSubmitting ? 'border-gray-300 bg-gray-50 cursor-not-allowed' : (translationVideoDragOver ? 'border-indigo-500 bg-indigo-50' : 'border-gray-300 hover:border-indigo-400 hover:bg-indigo-50/30 cursor-pointer')"
+              >
                 <input type="file" ref="translationVideoInputRef" @change="handleTranslationVideoSelect" accept="video/*" class="hidden" :disabled="translationIsSubmitting" />
                 
                 <!-- Loading Overlay -->
@@ -436,8 +414,8 @@
                 </div>
                 
                 <template v-if="!translationVideoFile">
-                  <p class="text-gray-700 text-sm font-medium">点击上传视频</p>
-                  <p class="text-gray-400 text-xs mt-1">支持 mp4, avi, mov 等</p>
+                  <p class="text-gray-700 text-sm font-medium">{{ translationVideoDragOver ? '松开以上传视频' : '点击或拖拽视频到此处上传' }}</p>
+                  <p class="text-gray-400 text-xs mt-1">支持 mp4, avi, mov 等，可拖拽文件夹批量识别</p>
                 </template>
                 <div v-else class="flex flex-col items-center">
                   <img v-if="translationVideoThumbnail" :src="translationVideoThumbnail" class="max-w-full h-auto max-h-36 object-contain rounded-lg mb-3" alt="Video thumbnail" />
@@ -499,20 +477,9 @@
       </div>
 
       <!-- Automatic Video Translation Feature -->
-      <div v-else-if="currentFeature === 'auto-video-translate'" class="flex min-h-screen">
-        <!-- Far Left Wider Nav -->
-        <aside v-if="isDesktop" class="w-44 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-1.5 flex">
-          <div class="text-xs text-gray-500 px-1 mb-1">导航</div>
-          <button @click="navigateToFeature('auto-video-translate')" class="w-full text-left px-3 py-2 rounded-md text-sm transition-colors"
-                  :class="currentFeature === 'auto-video-translate' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700 hover:bg-gray-100'">视频翻译（自动版）</button>
-          <button @click="navigateToFeature('subtitle-erase')" class="w-full text-left px-3 py-2 rounded-md text-sm text-gray-700 hover:bg-gray-100">字幕擦除</button>
-          <button @click="navigateToFeature('subtitle-extract')" class="w-full text-left px-3 py-2 rounded-md text-sm text-gray-700 hover:bg-gray-100">字幕提取</button>
-          <button @click="navigateToFeature('subtitle-embed')" class="w-full text-left px-3 py-2 rounded-md text-sm text-gray-700 hover:bg-gray-100">视频翻译（手动）</button>
-          <button @click="navigateToFeature('image-translate')" class="w-full text-left px-3 py-2 rounded-md text-sm text-gray-700 hover:bg-gray-100">图片翻译</button>
-        </aside>
-
+      <div v-else-if="currentFeature === 'auto-video-translate'" class="flex h-full overflow-hidden">
         <!-- Left Process Config Column -->
-        <aside v-if="isDesktop" class="w-96 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-3 overflow-y-auto max-h-screen flex">
+        <aside v-if="isDesktop" class="w-96 2xl:w-[420px] flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-3 overflow-y-auto max-h-screen flex">
           <div class="bg-white rounded-xl border border-gray-200 shadow-sm">
             <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <h3 class="text-sm font-medium text-gray-900">已选择的处理方式</h3>
@@ -584,6 +551,10 @@
                   class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-not-allowed"
                 />
               </label>
+
+              <button @click="startAutoTranslation" :disabled="autoIsProcessing || autoUploadedVideos.length === 0 || autoTargetLanguages.length === 0" :title="autoUploadedVideos.length === 0 ? '请先确认上传视频' : autoTargetLanguages.length === 0 ? '请至少选择一种目标语言' : ''" class="w-full py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                {{ autoIsProcessing ? '处理中...' : `提交 (消耗${autoTranslationPointCost}积分)` }}
+              </button>
 
               <div class="pt-1">
                 <div class="flex items-center justify-between mb-2">
@@ -778,10 +749,6 @@
                 </label>
               </div>
 
-              <button @click="startAutoTranslation" :disabled="autoIsProcessing || autoUploadedVideos.length === 0 || autoTargetLanguages.length === 0" :title="autoUploadedVideos.length === 0 ? '请先确认上传视频' : autoTargetLanguages.length === 0 ? '请至少选择一种目标语言' : ''" class="w-full py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed">
-                {{ autoIsProcessing ? '处理中...' : `提交 (消耗${autoTranslationPointCost}积分)` }}
-              </button>
-
               <!-- Test Version Toggle -->
               <div class="mt-2 flex items-center justify-center">
                 <label class="flex items-center space-x-1.5 cursor-pointer">
@@ -799,8 +766,8 @@
         </aside>
 
         <!-- Center Workspace -->
-        <section class="flex-1 flex items-start justify-center bg-white relative">
-          <div class="w-full h-full flex flex-col items-center justify-start p-6 pt-20">
+        <section class="flex-1 bg-white relative overflow-y-auto h-full">
+          <div class="w-full flex flex-col items-center justify-start p-6 pt-10 2xl:pt-16 pb-20">
             <div class="relative">
               <!-- Two videos side by side when viewing history -->
               <ResponsiveVideoContainer
@@ -828,8 +795,8 @@
               </ResponsiveVideoContainer>
               <!-- Single video for uploaded video preview with subtitle overlay -->
               <div v-else-if="autoVideoObjectUrl" class="inline-block">
-                <!-- 9:16 固定比例容器 -->
-                <div class="relative bg-black rounded-lg shadow overflow-hidden" style="width: 360px; aspect-ratio: 9/16;">
+                <!-- 9:16 响应式比例容器 -->
+                <div class="relative bg-black rounded-lg shadow overflow-hidden w-[340px] md:w-[360px] 2xl:w-[420px]" style="aspect-ratio: 9/16;">
                   <!-- 视频层 -->
                   <video
                     ref="autoPreviewVideoRef"
@@ -880,33 +847,54 @@
               <video v-else-if="currentVideoUrl" :src="currentVideoUrl" controls autoplay class="max-w-[80%] max-h-[70vh] rounded-lg shadow"></video>
               <div v-else class="text-gray-400 text-sm">暂无视频</div>
             </div>
-            <div v-if="!currentVideoUrl && !autoSelectedHistoryTask && autoVideoFiles.length > 0" class="mt-4 w-full max-w-[80%]">
-              <div class="flex items-center justify-between mb-2">
-                <span class="text-sm font-medium text-gray-700">待上传视频</span>
-                <span class="text-xs text-indigo-600">{{ autoPreviewVideoIndex + 1 }} / {{ autoVideoFiles.length }}</span>
+            <div v-if="!currentVideoUrl && !autoSelectedHistoryTask && autoVideoFiles.length > 0" class="mt-4 w-[340px] md:w-[360px] 2xl:w-[420px]">
+              <div class="flex items-center justify-between mb-3">
+                <span class="text-sm font-semibold text-gray-800">待上传视频</span>
+                <span class="text-xs font-medium text-indigo-600 bg-indigo-50 px-2 py-1 rounded-full">{{ autoPreviewVideoIndex + 1 }} / {{ autoVideoFiles.length }}</span>
               </div>
-              <div class="flex flex-wrap gap-2 justify-center">
+              <div class="flex flex-wrap gap-2">
                 <div
                   v-for="(file, index) in autoVideoFiles"
                   :key="`${file.name}-${index}`"
-                  class="relative max-w-44"
+                  class="group relative flex-1 min-w-[140px]"
                 >
                   <button
                     type="button"
                     @click="switchAutoPreviewVideo(index)"
-                    class="w-full max-w-44 truncate px-3 py-1.5 pr-6 rounded-md text-xs transition-colors"
-                    :class="getAutoVideoFileButtonClass(file, index)"
+                    class="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg transition-all duration-200 text-left"
+                    :class="getAutoVideoFileButtonClass(file, index) === 'bg-indigo-600 text-white'
+                      ? 'bg-indigo-600 text-white shadow-md'
+                      : getAutoVideoFileButtonClass(file, index).includes('bg-green-50')
+                      ? 'bg-green-50 text-green-700 border border-green-200'
+                      : 'bg-white text-gray-700 border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/50'"
                     :title="file.name"
                   >
-                    {{ file.name }}
+                    <div class="flex-shrink-0">
+                      <svg class="w-5 h-5" :class="getAutoVideoFileButtonClass(file, index) === 'bg-indigo-600 text-white' ? 'text-white' : getAutoVideoFileButtonClass(file, index).includes('bg-green-50') ? 'text-green-600' : 'text-gray-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <p class="text-sm font-medium truncate">{{ file.name }}</p>
+                      <p class="text-xs mt-0.5" :class="getAutoVideoFileButtonClass(file, index) === 'bg-indigo-600 text-white' ? 'text-indigo-100' : 'text-gray-500'">
+                        {{ (file.size / 1024 / 1024).toFixed(2) }} MB
+                      </p>
+                    </div>
+                    <div v-if="getAutoVideoFileButtonClass(file, index).includes('bg-green-50')" class="flex-shrink-0">
+                      <svg class="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
                   </button>
                   <button
                     type="button"
                     @click.stop="removeAutoVideoFile(index)"
-                    class="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] leading-none text-white hover:bg-red-600"
+                    class="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white shadow-md hover:bg-red-600 transition-all opacity-0 group-hover:opacity-100"
                     title="删除"
                   >
-                    ×
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
                   </button>
                 </div>
               </div>
@@ -914,16 +902,26 @@
                 type="button"
                 @click="confirmAutoVideoUpload"
                 :disabled="autoIsUploading || autoPendingVideoFiles.length === 0"
-                class="mt-3 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                class="mt-4 w-full rounded-lg bg-indigo-600 px-4 py-3 text-sm font-semibold text-white transition-all duration-200 hover:bg-indigo-700 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:shadow-none"
               >
-                {{ autoIsUploading ? `上传中... ${autoUploadProgress}%` : autoUploadedVideos.length > 0 ? '继续上传' : '确认上传' }}
+                <span v-if="autoIsUploading" class="flex items-center justify-center gap-2">
+                  <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  上传中... {{ autoUploadProgress }}%
+                </span>
+                <span v-else>{{ autoUploadedVideos.length > 0 ? '继续上传' : '确认上传' }}</span>
               </button>
-              <div v-if="autoUploadedVideos.length > 0" class="mt-2 text-center text-xs text-green-600">
+              <div v-if="autoUploadedVideos.length > 0" class="mt-3 flex items-center justify-center gap-2 text-xs text-green-600 bg-green-50 px-3 py-2 rounded-lg">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
                 已上传 {{ autoUploadedVideos.length }} 个视频，待上传 {{ autoPendingVideoFiles.length }} 个视频
               </div>
             </div>
             <!-- Language Switcher for Multi-language Videos -->
-            <div v-if="currentPlayingTask && getCompletedLanguageResults(currentPlayingTask).length > 1" class="mt-4 pt-4 border-t border-gray-200 w-full max-w-[80%]">
+            <div v-if="currentPlayingTask && getCompletedLanguageResults(currentPlayingTask).length > 1" class="mt-4 pt-4 border-t border-gray-200 w-[340px] md:w-[360px] 2xl:w-[420px]">
               <div class="flex items-center justify-between mb-2">
                 <span class="text-sm font-medium text-gray-700">切换语言版本</span>
                 <span v-if="currentPlayingLanguage" class="text-xs text-indigo-600">{{ getLanguageName(currentPlayingLanguage) }}</span>
@@ -962,7 +960,7 @@
         </section>
 
         <!-- Right Sidebar Cards -->
-        <aside class="w-full lg:w-96 border-l border-gray-200 bg-gray-50 p-3 space-y-3">
+        <aside class="w-full lg:w-96 2xl:w-[420px] border-l border-gray-200 bg-gray-50 p-3 space-y-3 overflow-y-auto h-full pb-10">
           <!-- Upload Card -->
           <div class="bg-white rounded-xl border border-gray-200 shadow-sm">
             <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
@@ -970,9 +968,13 @@
             </div>
             <div class="p-4">
               <div
-                @click="() => !autoIsProcessing && autoVideoInputRef?.click()"
+                @click="() => !autoIsProcessing && !autoIsUploading && autoVideoInputRef?.click()"
+                @dragenter.prevent="!autoIsProcessing && !autoIsUploading && (autoVideoDragOver = true)"
+                @dragover.prevent="!autoIsProcessing && !autoIsUploading && (autoVideoDragOver = true)"
+                @dragleave.prevent="autoVideoDragOver = false"
+                @drop.prevent="handleAutoVideoDrop"
                 class="border-2 border-dashed rounded-lg p-6 text-center transition-colors duration-200 relative"
-                :class="autoIsProcessing || autoIsUploading ? 'border-gray-300 bg-gray-50 cursor-not-allowed' : 'border-gray-300 hover:border-indigo-400 hover:bg-indigo-50/30 cursor-pointer'"
+                :class="autoIsProcessing || autoIsUploading ? 'border-gray-300 bg-gray-50 cursor-not-allowed' : (autoVideoDragOver ? 'border-indigo-500 bg-indigo-50' : 'border-gray-300 hover:border-indigo-400 hover:bg-indigo-50/30 cursor-pointer')"
               >
                 <input type="file" ref="autoVideoInputRef" @change="handleAutoVideoSelect" accept="video/*" multiple class="hidden" :disabled="autoIsProcessing || autoIsUploading" />
                 
@@ -992,11 +994,12 @@
                 </div>
                 
                 <template v-if="autoVideoFiles.length === 0">
-                  <p class="text-gray-700 text-sm font-medium">点击上传视频</p>
-                  <p class="text-gray-400 text-xs mt-1">支持 mp4, avi, mov 等（可多选）</p>
+                  <p class="text-gray-700 text-sm font-medium">{{ autoVideoDragOver ? '松开以上传视频' : '点击或拖拽视频到此处上传' }}</p>
+                  <p class="text-gray-400 text-xs mt-1">支持 mp4, avi, mov 等（可多选/拖拽文件夹）</p>
                 </template>
                 <div v-else class="w-full">
                   <p class="text-gray-900 text-xs font-medium text-center">待上传 {{ autoVideoFiles.length }} 个视频</p>
+                  <p class="text-gray-400 text-[11px] mt-1 text-center">{{ autoVideoDragOver ? '松开以追加视频' : '可继续拖拽视频或文件夹追加' }}</p>
                 </div>
               </div>
             </div>
@@ -1210,16 +1213,6 @@
 
       <!-- Image Translate Feature (Four-column) -->
       <div v-else-if="currentFeature === 'image-translate'" class="flex min-h-screen">
-        <!-- Far Left Wider Nav -->
-        <aside v-if="isDesktop" class="w-44 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-1.5 flex">
-          <div class="text-xs text-gray-500 px-1 mb-1">导航</div>
-          <button @click="navigateToFeature('auto-video-translate')" class="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-gray-100">视频翻译（自动版）</button>
-          <button @click="navigateToFeature('subtitle-erase')" class="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-gray-100">字幕擦除</button>
-          <button @click="navigateToFeature('subtitle-extract')" class="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-gray-100">字幕提取</button>
-          <button @click="navigateToFeature('subtitle-embed')" class="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-gray-100">视频翻译（手动）</button>
-          <button @click="navigateToFeature('image-translate')" class="w-full text-left px-3 py-2 rounded-md text-sm bg-indigo-100 text-indigo-700">图片翻译</button>
-        </aside>
-
         <!-- Left Process Config Column -->
         <aside v-if="isDesktop" class="w-72 flex-col border-r border-gray-200 bg-gray-50 py-4 px-3 space-y-3 flex">
           <div class="bg-white rounded-xl border border-gray-200 shadow-sm">
@@ -1779,6 +1772,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useLayoutStore } from '@/stores/layout'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { UploadFilled } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import MobileHeader from '@/components/MobileHeader.vue'
 import MobileDrawer from '@/components/MobileDrawer.vue'
 import ResponsiveVideoContainer from '@/components/ResponsiveVideoContainer.vue'
@@ -2400,12 +2394,17 @@ const autoContinuousDubbing = ref(false)
 const autoSubtitleStyleId = ref('default')
 const selectedAutoSubtitleStyle = computed(() => AUTO_SUBTITLE_STYLE_OPTIONS.find(style => style.id === autoSubtitleStyleId.value) || AUTO_SUBTITLE_STYLE_OPTIONS[0])
 const autoTranslationPointCost = computed(() => {
-  const languagePoints = 10 + Math.max(0, autoTargetLanguages.value.length - 1) * 5
+  let languagePoints = 10 + Math.max(0, autoTargetLanguages.value.length - 1) * 5
+
+  // 全屏字幕擦除纳入基础语言积分，随时长倍增
+  if (autoFullScreenErase.value) {
+    languagePoints += 5
+  }
 
   // 计算所有视频的总积分
   const totalPoints = autoUploadedVideos.value.reduce((sum, video) => {
     const duration = video.duration || 0
-    const timeUnits = Math.ceil(duration / 30) // 以30秒为一个单位
+    const timeUnits = Math.ceil(duration / 60) // 以60秒为一个单位
     return sum + languagePoints * Math.max(1, timeUnits)
   }, 0)
 
@@ -2436,16 +2435,16 @@ const subtitleBottomPosition = ref(30)
 const showSubtitlePreview = ref(false)
 const videoMetadataLoaded = ref(0) // Counter to force computed recalculation
 const subtitlePreviewFontSize = computed(() => {
-  // Fixed font size for preview, independent of video resolution
-  // The preview card is fixed at 360px width with 9:16 aspect ratio (640px height)
-  // Scale font size based on the fixed preview container, not the actual video resolution
+  // Access videoMetadataLoaded to establish reactive dependency for re-calculation when video loads
+  const _ = videoMetadataLoaded.value
 
-  const PREVIEW_CONTAINER_HEIGHT = 640 // 360px * 16/9
+  // Dynamically get the client height of the video preview player, or fallback to 640px if not loaded
+  const renderedHeight = autoPreviewVideoRef.value?.clientHeight || 640
   const REFERENCE_VIDEO_HEIGHT = 1920 // Assume 1080x1920 as reference (vertical video)
 
-  // Scale the font size to fit the fixed preview container
-  // This ensures consistent subtitle size regardless of actual video resolution
-  const scale = PREVIEW_CONTAINER_HEIGHT / REFERENCE_VIDEO_HEIGHT
+  // Scale the font size to fit the rendered preview container
+  // This ensures consistent subtitle size regardless of actual video resolution and responsive layout
+  const scale = renderedHeight / REFERENCE_VIDEO_HEIGHT
 
   return Math.round(autoFontSize.value * scale)
 })
@@ -2559,6 +2558,85 @@ const stopDragSubtitle = () => {
   document.removeEventListener('mouseup', stopDragSubtitle)
 }
 
+// ===== Drag & Drop helpers (videos / folders) =====
+const VIDEO_FILE_EXTENSIONS = ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm', '.m4v', '.mpeg', '.mpg', '.3gp', '.ts']
+
+const isVideoFile = (file) => {
+  if (!file) return false
+  if (file.type && file.type.startsWith('video/')) return true
+  const name = (file.name || '').toLowerCase()
+  return VIDEO_FILE_EXTENSIONS.some(ext => name.endsWith(ext))
+}
+
+const readAllEntries = (reader) => new Promise((resolve, reject) => {
+  const all = []
+  const readBatch = () => {
+    reader.readEntries((batch) => {
+      if (!batch.length) {
+        resolve(all)
+      } else {
+        all.push(...batch)
+        readBatch()
+      }
+    }, reject)
+  }
+  readBatch()
+})
+
+const traverseFileEntry = async (entry, collected) => {
+  if (!entry) return
+  if (entry.isFile) {
+    await new Promise((resolve) => {
+      entry.file(
+        (file) => {
+          if (isVideoFile(file)) collected.push(file)
+          resolve()
+        },
+        () => resolve()
+      )
+    })
+  } else if (entry.isDirectory) {
+    const reader = entry.createReader()
+    try {
+      const entries = await readAllEntries(reader)
+      for (const sub of entries) {
+        await traverseFileEntry(sub, collected)
+      }
+    } catch (e) {
+      console.warn('Failed to read directory entries:', entry.fullPath, e)
+    }
+  }
+}
+
+// Extract all video files (recursing into dropped folders) from a DataTransfer
+const extractVideoFilesFromDataTransfer = async (dataTransfer) => {
+  const collected = []
+  const items = dataTransfer?.items
+  if (items && items.length && typeof items[0].webkitGetAsEntry === 'function') {
+    const entries = []
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]
+      if (item.kind === 'file') {
+        const entry = item.webkitGetAsEntry?.()
+        if (entry) entries.push(entry)
+      }
+    }
+    if (entries.length) {
+      for (const entry of entries) {
+        await traverseFileEntry(entry, collected)
+      }
+      return collected
+    }
+  }
+  // Fallback: plain files (no folder traversal available)
+  if (dataTransfer?.files?.length) {
+    for (const file of Array.from(dataTransfer.files)) {
+      if (isVideoFile(file)) collected.push(file)
+    }
+  }
+  return collected
+}
+
 // Generate video thumbnail
 const generateVideoThumbnail = (file) => {
   return new Promise((resolve) => {
@@ -2602,9 +2680,34 @@ const generateVideoThumbnail = (file) => {
 const handleTranslationVideoSelect = async (e) => {
   const file = e.target.files[0]
   if (file) {
-    translationVideoFile.value = file
-    translationVideoObjectUrl.value = URL.createObjectURL(file)
-    translationVideoThumbnail.value = await generateVideoThumbnail(file)
+    await applyTranslationVideoFile(file)
+  }
+}
+
+const applyTranslationVideoFile = async (file) => {
+  if (!file) return
+  if (translationVideoObjectUrl.value) {
+    URL.revokeObjectURL(translationVideoObjectUrl.value)
+  }
+  translationVideoFile.value = file
+  translationVideoObjectUrl.value = URL.createObjectURL(file)
+  translationVideoThumbnail.value = await generateVideoThumbnail(file)
+}
+
+// Drag & drop state for translation upload card
+const translationVideoDragOver = ref(false)
+
+const handleTranslationVideoDrop = async (e) => {
+  translationVideoDragOver.value = false
+  if (translationIsSubmitting.value) return
+  const videos = await extractVideoFilesFromDataTransfer(e.dataTransfer)
+  if (videos.length === 0) {
+    ElMessage.warning('未检测到可用的视频文件')
+    return
+  }
+  await applyTranslationVideoFile(videos[0])
+  if (videos.length > 1) {
+    ElMessage.info(`仅使用第一个视频文件：${videos[0].name}`)
   }
 }
 
@@ -3549,27 +3652,66 @@ const formatDate = (dateString) => {
 
 // Automatic video translation functions
 const handleAutoVideoSelect = async (e) => {
-  const files = Array.from(e.target.files || []).filter(file => file.type.startsWith('video/'))
+  const files = Array.from(e.target.files || []).filter(file => isVideoFile(file))
   if (files.length > 0) {
-    autoVideoFiles.value = [...autoVideoFiles.value, ...files]
-    autoPreviewVideoIndex.value = 0
-    autoVideoThumbnail.value = await generateVideoThumbnail(autoVideoFiles.value[0])
-    // Manage object URL for center preview
-    if (autoVideoObjectUrl.value) {
-      URL.revokeObjectURL(autoVideoObjectUrl.value)
-    }
-    autoVideoObjectUrl.value = URL.createObjectURL(autoVideoFiles.value[0])
-    // Clear history video URL to ensure preview shows the new video
-    currentVideoUrl.value = ''
-    autoSelectedHistoryTask.value = null
-    currentPlayingTask.value = null
-    currentPlayingLanguage.value = null
-    // Reset subtitle preview to hide it until video metadata loads
-    showSubtitlePreview.value = false
-    videoMetadataLoaded.value = 0
+    await addAutoVideoFiles(files)
     e.target.value = ''
   }
 }
+
+const addAutoVideoFiles = async (files) => {
+  if (!files || !files.length) return
+  autoVideoFiles.value = [...autoVideoFiles.value, ...files]
+  autoPreviewVideoIndex.value = 0
+  autoVideoThumbnail.value = await generateVideoThumbnail(autoVideoFiles.value[0])
+  if (autoVideoObjectUrl.value) {
+    URL.revokeObjectURL(autoVideoObjectUrl.value)
+  }
+  autoVideoObjectUrl.value = URL.createObjectURL(autoVideoFiles.value[0])
+  // Clear history video URL to ensure preview shows the new video
+  currentVideoUrl.value = ''
+  autoSelectedHistoryTask.value = null
+  currentPlayingTask.value = null
+  currentPlayingLanguage.value = null
+  // Reset subtitle preview to hide it until video metadata loads
+  showSubtitlePreview.value = false
+  videoMetadataLoaded.value = 0
+}
+
+// Drag & drop state for auto-translate upload card
+const autoVideoDragOver = ref(false)
+
+const handleAutoVideoDrop = async (e) => {
+  autoVideoDragOver.value = false
+  if (autoIsProcessing.value || autoIsUploading.value) return
+  const videos = await extractVideoFilesFromDataTransfer(e.dataTransfer)
+  if (videos.length === 0) {
+    ElMessage.warning('未检测到可用的视频文件')
+    return
+  }
+  await addAutoVideoFiles(videos)
+  ElMessage.success(`已添加 ${videos.length} 个视频`)
+}
+
+// 多文件并发上传到 OSS
+// MAX_CONCURRENT_FILES：同时进行分片上传的文件数上限
+// PART_PARALLEL_PER_FILE：每个文件内部并行的分片数
+// 总并发连接数 ≈ MAX_CONCURRENT_FILES * PART_PARALLEL_PER_FILE，需要控制在浏览器对单域名连接数限制以内
+// PART_SIZE：分片大小。10MB 在 20-200MB 的短视频场景能保证足够的并行度，丢包重传代价也较小
+// MAX_RETRIES_PER_FILE：单文件失败重试次数。配合 checkpoint 实现断点续传，每次重试只补传未完成的分片
+const MAX_CONCURRENT_FILES = 5
+const PART_PARALLEL_PER_FILE = 5
+const PART_SIZE = 10 * 1024 * 1024 // 10MB
+const MAX_RETRIES_PER_FILE = 5
+
+const buildAutoOssKey = (file) => {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '').slice(0, 15)
+  const randomStr = Math.random().toString(36).substring(2, 10)
+  const ext = (file.name.split('.').pop() || 'mp4').toLowerCase()
+  return `auto_translate/1/${timestamp}_${randomStr}.${ext}`
+}
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms))
 
 const confirmAutoVideoUpload = async () => {
   if (autoPendingVideoFiles.value.length === 0) return
@@ -3585,37 +3727,92 @@ const confirmAutoVideoUpload = async () => {
 
     const filesToUpload = [...autoPendingVideoFiles.value]
     const totalFiles = filesToUpload.length
-    let completedFiles = 0
 
-    for (const file of filesToUpload) {
-      // Generate OSS key
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '').slice(0, 15)
-      const randomStr = Math.random().toString(36).substring(2, 10)
-      const ext = file.name.split('.').pop()
-      const ossKey = `auto_translate/1/${timestamp}_${randomStr}.${ext}`
+    // 预先计算每个文件的 ossKey 和 duration，避免在并发上传中阻塞
+    const tasks = await Promise.all(filesToUpload.map(async (file) => ({
+      file,
+      ossKey: buildAutoOssKey(file),
+      duration: await getVideoDuration(file),
+    })))
 
-      // Get video duration
-      const duration = await getVideoDuration(file)
-
-      // Upload video to OSS with progress tracking
-      await ossClient.multipartUpload(ossKey, file, {
-        progress: (p) => {
-          autoUploadProgress.value = Math.round((completedFiles + p) / totalFiles * 100)
-        },
-        partSize: 30 * 1024 * 1024,
-        parallel: 5
-      })
-
-      autoUploadedVideos.value.push({ file, ossKey, duration })
-      completedFiles++
-      autoUploadProgress.value = Math.round(completedFiles / totalFiles * 100)
+    // 按文件维度跟踪每个文件的上传进度（0..1），用于聚合整体进度
+    const fileProgress = new Array(totalFiles).fill(0)
+    const updateOverallProgress = () => {
+      const sum = fileProgress.reduce((acc, p) => acc + p, 0)
+      autoUploadProgress.value = Math.min(100, Math.round((sum / totalFiles) * 100))
     }
-    
+
+    const failures = []
+
+    // 单文件上传：失败自动重试，复用 checkpoint 实现断点续传
+    const uploadOne = async (task, index) => {
+      let checkpoint = null
+      let lastError = null
+
+      for (let attempt = 1; attempt <= MAX_RETRIES_PER_FILE; attempt++) {
+        try {
+          await ossClient.multipartUpload(task.ossKey, task.file, {
+            // 续传：第 2 次起会带着上一轮的 checkpoint，SDK 自动跳过已完成分片
+            checkpoint,
+            // ali-oss 浏览器端 progress 签名: (percentage 0..1, cpt)
+            async progress(percentage, cpt) {
+              if (cpt) checkpoint = cpt
+              fileProgress[index] = percentage
+              updateOverallProgress()
+            },
+            partSize: PART_SIZE,
+            parallel: PART_PARALLEL_PER_FILE,
+          })
+
+          // success
+          fileProgress[index] = 1
+          updateOverallProgress()
+          autoUploadedVideos.value.push({
+            file: task.file,
+            ossKey: task.ossKey,
+            duration: task.duration,
+          })
+          return
+        } catch (err) {
+          lastError = err
+          console.warn(
+            `Upload attempt ${attempt}/${MAX_RETRIES_PER_FILE} failed for ${task.file.name}:`,
+            err?.message || err
+          )
+          if (attempt < MAX_RETRIES_PER_FILE) {
+            // 退避重试: 1s, 2s, 3s, 3s, ...
+            await sleep(1000 * Math.min(attempt, 3))
+          }
+        }
+      }
+
+      console.error(`Upload finally failed for ${task.file.name} after ${MAX_RETRIES_PER_FILE} attempts`)
+      failures.push({ name: task.file.name, error: lastError })
+    }
+
+    // worker 并发池：始终最多 MAX_CONCURRENT_FILES 个文件同时上传
+    let cursor = 0
+    const worker = async () => {
+      while (true) {
+        const i = cursor++
+        if (i >= tasks.length) break
+        await uploadOne(tasks[i], i)
+      }
+    }
+
+    const workerCount = Math.min(MAX_CONCURRENT_FILES, tasks.length)
+    await Promise.all(Array.from({ length: workerCount }, () => worker()))
+
     console.log('Videos uploaded successfully:', autoUploadedVideos.value.map(item => item.ossKey))
-    autoIsUploading.value = false
+
+    if (failures.length > 0) {
+      const detail = failures.map(f => `${f.name}: ${f.error?.message || f.error}`).join('\n')
+      alert(`部分视频上传失败 (${failures.length}/${totalFiles})，可重新选择失败文件后再试:\n${detail}`)
+    }
   } catch (error) {
     console.error('Failed to upload video:', error)
     alert('视频上传失败: ' + error.message)
+  } finally {
     autoIsUploading.value = false
   }
 }
