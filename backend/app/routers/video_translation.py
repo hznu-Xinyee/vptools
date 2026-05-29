@@ -72,7 +72,7 @@ class DownloadSelectedRequest(BaseModel):
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-fc_submit_semaphore = asyncio.Semaphore(10)
+fc_submit_semaphore = asyncio.Semaphore(5)
 
 
 def _build_backend_auto_subtitle_params(subtitle_params: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -482,7 +482,7 @@ async def submit_auto_translation_to_fc_background(
     continuous_dubbing: bool = False,
     use_test_version: bool = False
 ):
-    logger.info(f"[自动翻译] 任务 {task_id} 已进入 FC 提交队列，最多同时提交 10 个任务")
+    logger.info(f"[自动翻译] 任务 {task_id} 已进入 FC 提交队列，最多同时提交 5 个任务")
     async with fc_submit_semaphore:
         db = next(get_db())
         try:
