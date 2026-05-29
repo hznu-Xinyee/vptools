@@ -88,3 +88,14 @@ tts.md
 tts1.md
 tts2.md
 txt.md
+
+# Temporary scripts and backups
+backend/delete_processing_tasks.py
+backend/delete_user001_records.py
+backend/query_user001_failed_tasks.py
+backend/query_user001_failed_tasks_0529.py
+frontend/dist.backup.*/
+frontend/public/
+migration_record_*.txt
+user001_usage_report.md
+*.dump
